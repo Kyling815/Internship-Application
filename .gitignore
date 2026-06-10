@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+test.db
+local_dev.db
+.test_uploads/
+backend/uploads/*
+!backend/uploads/.gitkeep
+frontend/node_modules/
+frontend/dist/
+.DS_Store
