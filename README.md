@@ -14,7 +14,7 @@ A full-stack MVP for students to manage internship applications, upload supporti
 - Status timeline for HR-driven candidate job application changes.
 - Local AI/NLP CV-job matching with skill extraction, TF-IDF cosine similarity, suggestions, cover letter draft, and interview questions.
 - Dashboard statistics for applications, statuses, documents, average AI score, and recent activity.
-- Dockerfiles for frontend and backend plus Docker Compose for PostgreSQL, FastAPI, and Vite.
+- Dockerfiles for frontend and backend plus Docker Compose for FastAPI and Vite.
 - Alembic migration, seed script, and backend tests.
 
 ## Architecture
@@ -75,21 +75,76 @@ docker-compose.yml
 README.md
 ```
 
-## Local Setup
+## Run The Full Project From The Root
 
-1. Copy the environment file:
+Run the commands in this section from the repository root, where `docker-compose.yml` is located.
+
+1. Copy the environment file if `.env` does not exist:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Start the full stack:
+PowerShell equivalent:
 
-```bash
-docker compose up --build
+```powershell
+Copy-Item .env.example .env
 ```
 
-3. Open the app:
+2. Edit `.env` and configure `DATABASE_URL`, `SECRET_KEY`, storage, CORS, and the frontend API URL. For a local browser with the backend exposed on the same machine:
+
+```env
+BACKEND_PORT=8001
+VITE_API_BASE_URL=http://localhost:8001
+BACKEND_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
+
+For the full stack running on the current EC2 public IP:
+
+```env
+BACKEND_PORT=8001
+VITE_API_BASE_URL=http://<EC2_PUBLIC_IP>:8001
+BACKEND_CORS_ORIGINS=http://<EC2_PUBLIC_IP>:5173
+```
+
+3. Build and start the full stack in the background:
+
+One-command startup on EC2/Linux also waits for both services and loads the idempotent demo seed:
+
+```bash
+bash scripts/start.sh
+```
+
+PowerShell equivalent:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1
+```
+
+The underlying manual startup command is:
+
+```bash
+docker compose up -d --build
+```
+
+The backend automatically runs `alembic upgrade head` before Uvicorn starts.
+
+4. Check container state and startup logs:
+
+```bash
+docker compose ps
+docker compose logs --tail=100 backend
+docker compose logs --tail=100 frontend
+```
+
+5. Verify the services:
+
+```bash
+curl --fail http://127.0.0.1:8001/health
+curl --fail http://127.0.0.1:5173
+```
+
+Open the app locally:
 
 ```text
 Frontend: http://localhost:5173
@@ -97,7 +152,42 @@ Backend API docs: http://localhost:8001/docs
 Health check: http://localhost:8001/health
 ```
 
-The backend runs `alembic upgrade head` before starting. It also creates tables on startup to keep the MVP forgiving during local development.
+For EC2, replace `localhost` with the EC2 public IP. Its security group must allow `5173` and `8001` only from the administrator's public IP while testing.
+
+Follow logs continuously:
+
+```bash
+docker compose logs -f
+```
+
+Apply migrations manually when needed:
+
+```bash
+docker compose run --rm backend alembic upgrade head
+docker compose run --rm backend alembic current
+```
+
+Run backend tests and the frontend production build:
+
+```bash
+docker compose run --rm backend pytest
+docker compose run --rm frontend npm run build
+```
+
+Restart the services after configuration changes:
+
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+Stop the project without deleting RDS or S3 data:
+
+```bash
+docker compose down
+```
+
+The backend also creates tables on startup to keep the MVP forgiving during local development.
 The default host backend port is `8001` to avoid common local conflicts. To use port `8000`, set `BACKEND_PORT=8000` and `VITE_API_BASE_URL=http://localhost:8000` in `.env`.
 The app uses AWS RDS PostgreSQL through `DATABASE_URL`; Docker Compose does not start a local PostgreSQL container.
 
@@ -108,10 +198,10 @@ If you run FastAPI directly with Uvicorn on Windows, use the same AWS RDS `DATAB
 Use this shape in `.env` and replace `<PASSWORD>` with the RDS database password:
 
 ```env
-DATABASE_URL="postgresql://postgres:<PASSWORD>@internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com:5432/postgres?schema=public&sslmode=require"
+DATABASE_URL=postgresql+psycopg2://postgres:<URL_ENCODED_PASSWORD>@internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com:5432/postgres?schema=public&sslmode=require
 ```
 
-If the password contains special URL characters such as `@`, `#`, `/`, `:` or `%`, URL-encode them before placing the value in `DATABASE_URL`.
+Do not surround this value with quotes when using `docker run --env-file`. If the password contains special URL characters such as `@`, `#`, `/`, `:` or `%`, URL-encode it before placing it in `DATABASE_URL`.
 
 Then run:
 
@@ -414,13 +504,56 @@ On Amazon Linux 2023, connect to the EC2 instance and install the required tools
 
 ```bash
 sudo dnf update -y
-sudo dnf install -y git docker nmap-ncat
+sudo dnf install -y git docker nmap-ncat curl
 sudo systemctl enable --now docker
 sudo usermod -aG docker ec2-user
 exit
 ```
 
-Reconnect so the Docker group membership takes effect, then verify private RDS connectivity:
+Reconnect so the Docker group membership takes effect, then install the Docker Compose v2 CLI plugin if it is not already available:
+
+```bash
+if ! docker compose version >/dev/null 2>&1; then
+  case "$(uname -m)" in
+    x86_64) COMPOSE_ARCH=x86_64 ;;
+    aarch64|arm64) COMPOSE_ARCH=aarch64 ;;
+    *) echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
+  esac
+
+  mkdir -p "$HOME/.docker/cli-plugins"
+  curl -SL \
+    "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${COMPOSE_ARCH}" \
+    -o "$HOME/.docker/cli-plugins/docker-compose"
+  chmod +x "$HOME/.docker/cli-plugins/docker-compose"
+fi
+
+docker compose version
+```
+
+Install the latest Docker Buildx plugin because the version bundled with Amazon Linux may be too old for current Compose releases:
+
+```bash
+case "$(uname -m)" in
+  x86_64) BUILDX_ARCH=amd64 ;;
+  aarch64|arm64) BUILDX_ARCH=arm64 ;;
+  *) echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
+esac
+
+BUILDX_VERSION=$(curl -fsSL \
+  https://api.github.com/repos/docker/buildx/releases/latest \
+  | awk -F '"' '/tag_name/ {print $4; exit}')
+
+test -n "$BUILDX_VERSION"
+mkdir -p "$HOME/.docker/cli-plugins"
+curl -fSL \
+  "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-${BUILDX_ARCH}" \
+  -o "$HOME/.docker/cli-plugins/docker-buildx"
+chmod +x "$HOME/.docker/cli-plugins/docker-buildx"
+
+docker buildx version
+```
+
+Then verify private RDS connectivity:
 
 ```bash
 nc -vz internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com 5432
@@ -439,7 +572,7 @@ chmod 600 .env
 Set at least these production values in `.env`:
 
 ```env
-DATABASE_URL="postgresql://postgres:<PASSWORD>@internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com:5432/postgres?schema=public&sslmode=require"
+DATABASE_URL=postgresql+psycopg2://postgres:<URL_ENCODED_PASSWORD>@internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com:5432/postgres?schema=public&sslmode=require
 SECRET_KEY=<LONG_RANDOM_VALUE>
 APP_DEBUG=false
 BACKEND_CORS_ORIGINS=https://<FRONTEND_DOMAIN>
