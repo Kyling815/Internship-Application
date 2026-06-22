@@ -47,6 +47,54 @@ def upload_candidate_document(client, headers, application_id):
     return response.json()
 
 
+def test_hr_can_create_another_job_with_large_salary(client):
+    hr_headers = register_and_login(
+        client,
+        email="large-salary-hr@example.edu",
+        role="hr",
+        full_name="Large Salary HR",
+    )
+    company_response = client.post(
+        "/companies",
+        json={
+            "name": "Large Salary Company",
+            "description": "Tests 64-bit salary storage.",
+            "website": None,
+            "industry": "Technology",
+            "location": "Singapore",
+            "logo_url": None,
+        },
+        headers=hr_headers,
+    )
+    assert company_response.status_code == 201
+
+    base_payload = {
+        "description": "A valid full-time role.",
+        "requirements": "Relevant experience",
+        "responsibilities": "Deliver project work",
+        "location": "Singapore",
+        "employment_type": "full_time",
+        "work_mode": "hybrid",
+        "salary_min": 1_111_111,
+        "deadline": "2026-08-25",
+        "status": "published",
+    }
+    first_response = client.post(
+        "/hr/jobs",
+        json={**base_payload, "title": "First Role", "salary_max": 2_000_000},
+        headers=hr_headers,
+    )
+    assert first_response.status_code == 201
+
+    second_response = client.post(
+        "/hr/jobs",
+        json={**base_payload, "title": "Second Role", "salary_max": 2_222_222_222},
+        headers=hr_headers,
+    )
+    assert second_response.status_code == 201
+    assert second_response.json()["salary_max"] == 2_222_222_222
+
+
 def test_two_sided_job_application_flow(client):
     hr_headers = register_and_login(
         client,

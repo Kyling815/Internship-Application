@@ -10,6 +10,7 @@ USER_ROLE_VALUES = ["candidate", "hr", "admin"]
 JOB_POSTING_STATUS_VALUES = ["draft", "published", "closed"]
 JOB_EMPLOYMENT_TYPE_VALUES = ["internship", "part_time", "full_time"]
 JOB_WORK_MODE_VALUES = ["onsite", "hybrid", "remote"]
+MAX_SAFE_SALARY_VALUE = 9_007_199_254_740_991
 JOB_APPLICATION_STATUS_VALUES = [
     "submitted",
     "under_review",
@@ -187,8 +188,8 @@ class JobPostingBase(BaseModel):
     location: str | None = Field(default=None, max_length=255)
     employment_type: JobEmploymentType = "internship"
     work_mode: JobWorkMode = "onsite"
-    salary_min: int | None = Field(default=None, ge=0)
-    salary_max: int | None = Field(default=None, ge=0)
+    salary_min: int | None = Field(default=None, ge=0, le=MAX_SAFE_SALARY_VALUE)
+    salary_max: int | None = Field(default=None, ge=0, le=MAX_SAFE_SALARY_VALUE)
     deadline: date | None = None
 
     @model_validator(mode="after")
@@ -210,8 +211,8 @@ class JobPostingUpdate(BaseModel):
     location: str | None = Field(default=None, max_length=255)
     employment_type: JobEmploymentType | None = None
     work_mode: JobWorkMode | None = None
-    salary_min: int | None = Field(default=None, ge=0)
-    salary_max: int | None = Field(default=None, ge=0)
+    salary_min: int | None = Field(default=None, ge=0, le=MAX_SAFE_SALARY_VALUE)
+    salary_max: int | None = Field(default=None, ge=0, le=MAX_SAFE_SALARY_VALUE)
     deadline: date | None = None
     status: JobPostingStatus | None = None
 

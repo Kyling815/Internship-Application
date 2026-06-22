@@ -4,6 +4,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    BigInteger,
     Integer,
     JSON,
     String,
@@ -188,8 +189,8 @@ class JobPosting(Base):
     location = Column(String(255), nullable=True)
     employment_type = Column(String(50), default="internship", nullable=False)
     work_mode = Column(String(50), default="onsite", nullable=False)
-    salary_min = Column(Integer, nullable=True)
-    salary_max = Column(Integer, nullable=True)
+    salary_min = Column(BigInteger, nullable=True)
+    salary_max = Column(BigInteger, nullable=True)
     deadline = Column(Date, nullable=True)
     status = Column(String(50), default="draft", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
