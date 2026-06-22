@@ -108,7 +108,7 @@ If you run FastAPI directly with Uvicorn on Windows, use the same AWS RDS `DATAB
 Use this shape in `.env` and replace `<PASSWORD>` with the RDS database password:
 
 ```env
-DATABASE_URL="postgresql://postgres:<PASSWORD>@internship-tracker-db.cd6umwocy4x5.ap-southeast-2.rds.amazonaws.com:5432/postgres?schema=public&sslmode=require"
+DATABASE_URL="postgresql://postgres:<PASSWORD>@internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com:5432/postgres?schema=public&sslmode=require"
 ```
 
 If the password contains special URL characters such as `@`, `#`, `/`, `:` or `%`, URL-encode them before placing the value in `DATABASE_URL`.
@@ -172,7 +172,7 @@ docker compose exec backend pytest
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | AWS RDS PostgreSQL connection string used by FastAPI, Alembic, and Prisma |
+| `DATABASE_URL` | AWS RDS PostgreSQL connection string used by FastAPI, SQLAlchemy, and Alembic |
 | `SECRET_KEY` | JWT signing secret |
 | `BACKEND_CORS_ORIGINS` | Comma-separated allowed frontend origins |
 | `BACKEND_PORT` | Host port mapped to the backend container |
@@ -405,6 +405,89 @@ Phase 2.5 does not add any new HR-side AI ranking or screening logic. The new ca
 - File storage: set `STORAGE_BACKEND=s3`, configure `S3_BUCKET`, and grant the backend an IAM role with least-privilege S3 access. The app generates presigned download URLs for private S3 objects.
 - Logs: keep stdout logging and ship container logs to CloudWatch.
 - Secrets: store production secrets in AWS Secrets Manager, SSM Parameter Store, ECS secrets, or EC2 instance configuration.
+
+### EC2 Backend With Private RDS
+
+The backend uses SQLAlchemy at runtime and Alembic for database migrations. Keep RDS private and allow PostgreSQL traffic from the EC2 security group to the RDS security group.
+
+On Amazon Linux 2023, connect to the EC2 instance and install the required tools:
+
+```bash
+sudo dnf update -y
+sudo dnf install -y git docker nmap-ncat
+sudo systemctl enable --now docker
+sudo usermod -aG docker ec2-user
+exit
+```
+
+Reconnect so the Docker group membership takes effect, then verify private RDS connectivity:
+
+```bash
+nc -vz internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com 5432
+```
+
+Clone and configure the backend:
+
+```bash
+git clone https://github.com/Kyling815/Internship-Application.git
+cd Internship-Application
+cp .env.example .env
+nano .env
+chmod 600 .env
+```
+
+Set at least these production values in `.env`:
+
+```env
+DATABASE_URL="postgresql://postgres:<PASSWORD>@internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com:5432/postgres?schema=public&sslmode=require"
+SECRET_KEY=<LONG_RANDOM_VALUE>
+APP_DEBUG=false
+BACKEND_CORS_ORIGINS=https://<FRONTEND_DOMAIN>
+STORAGE_BACKEND=s3
+AWS_REGION=<S3_BUCKET_REGION>
+S3_BUCKET=<S3_BUCKET_NAME>
+```
+
+Build the image and apply the Alembic migrations:
+
+```bash
+docker build -t internship-tracker-backend:latest ./backend
+docker run --rm --env-file .env internship-tracker-backend:latest alembic upgrade head
+```
+
+Start the backend and verify it:
+
+```bash
+docker rm -f internship-tracker-backend 2>/dev/null || true
+docker run -d \
+  --name internship-tracker-backend \
+  --restart unless-stopped \
+  --env-file .env \
+  -p 8001:8000 \
+  internship-tracker-backend:latest
+
+docker logs --tail=100 internship-tracker-backend
+curl --fail http://127.0.0.1:8001/health
+```
+
+Attach an EC2 instance role with the required S3 permissions instead of setting AWS access keys. For containers to retrieve instance-role credentials through IMDSv2, configure the EC2 metadata response hop limit to `2`. Restrict EC2 port `8001` to the load balancer security group, or temporarily to the administrator IP while testing.
+
+To deploy a later commit:
+
+```bash
+cd Internship-Application
+git pull --ff-only
+docker build -t internship-tracker-backend:latest ./backend
+docker run --rm --env-file .env internship-tracker-backend:latest alembic upgrade head
+docker rm -f internship-tracker-backend
+docker run -d \
+  --name internship-tracker-backend \
+  --restart unless-stopped \
+  --env-file .env \
+  -p 8001:8000 \
+  internship-tracker-backend:latest
+curl --fail http://127.0.0.1:8001/health
+```
 
 ## Future Improvements
 
