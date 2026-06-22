@@ -53,7 +53,7 @@ export function CandidateDashboard() {
       {dashboard && (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard icon={BriefcaseBusiness} label="Tracker applications" value={dashboard.total_personal_applications} />
+            <StatCard icon={BriefcaseBusiness} label="Saved opportunities" value={dashboard.total_personal_applications} />
             <StatCard icon={Send} label="Submitted job applications" value={dashboard.total_submitted_job_applications} tone="sky" />
             <StatCard icon={FileText} label="Recent documents" value={dashboard.recent_documents.length} tone="emerald" />
             <StatCard icon={Clock3} label="Upcoming deadlines" value={dashboard.upcoming_deadlines.length} tone="amber" />

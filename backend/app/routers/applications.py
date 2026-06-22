@@ -13,6 +13,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/applications", tags=["applications"])
 
 
+DIRECT_DOCUMENTS_COMPANY = "Personal Documents"
+DIRECT_DOCUMENTS_POSITION = "Reusable candidate documents"
+DIRECT_DOCUMENTS_DESCRIPTION = (
+    "Storage area for documents uploaded directly from candidate job applications."
+)
+
+
+def is_direct_documents_application(application: models.InternshipApplication) -> bool:
+    return (
+        application.company_name == DIRECT_DOCUMENTS_COMPANY
+        and application.position_title == DIRECT_DOCUMENTS_POSITION
+        and application.job_description == DIRECT_DOCUMENTS_DESCRIPTION
+    )
+
+
 def get_owned_application(
     db: Session,
     application_id: int,
@@ -31,7 +46,14 @@ def list_applications(
 ):
     return (
         db.query(models.InternshipApplication)
-        .filter(models.InternshipApplication.user_id == current_user.id)
+        .filter(
+            models.InternshipApplication.user_id == current_user.id,
+            ~(
+                (models.InternshipApplication.company_name == DIRECT_DOCUMENTS_COMPANY)
+                & (models.InternshipApplication.position_title == DIRECT_DOCUMENTS_POSITION)
+                & (models.InternshipApplication.job_description == DIRECT_DOCUMENTS_DESCRIPTION)
+            ),
+        )
         .order_by(models.InternshipApplication.created_at.desc())
         .all()
     )
@@ -71,6 +93,8 @@ def update_application(
     current_user: models.User = Depends(require_role("candidate", "admin")),
 ):
     application = get_owned_application(db, application_id, current_user.id)
+    if is_direct_documents_application(application):
+        raise HTTPException(status_code=400, detail="Personal Documents cannot be edited")
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
         setattr(application, field, value)
@@ -87,6 +111,8 @@ def delete_application(
     current_user: models.User = Depends(require_role("candidate", "admin")),
 ):
     application = get_owned_application(db, application_id, current_user.id)
+    if is_direct_documents_application(application):
+        raise HTTPException(status_code=400, detail="Personal Documents cannot be deleted")
     storage = StorageService()
     for document in application.documents:
         storage.delete_file(document.s3_key)

@@ -1,13 +1,14 @@
 import {
   BriefcaseBusiness,
   Building2,
+  FileSearch,
   LayoutDashboard,
   LogOut,
   PlusCircle,
   Send,
   UserRound
 } from "lucide-react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 
@@ -15,8 +16,8 @@ const candidateNavItems = [
   { to: "/candidate/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/candidate/jobs", label: "Job Board", icon: BriefcaseBusiness },
   { to: "/candidate/job-applications", label: "Submissions", icon: Send },
-  { to: "/applications", label: "Tracker", icon: BriefcaseBusiness },
-  { to: "/applications/new", label: "New Tracker App", icon: PlusCircle },
+  { to: "/applications", label: "Saved", icon: BriefcaseBusiness },
+  { to: "/applications/ai-cv-matching", label: "AI CV Matching", icon: FileSearch },
   { to: "/candidate/profile", label: "Profile", icon: UserRound }
 ];
 
@@ -27,9 +28,26 @@ const hrNavItems = [
   { to: "/hr/jobs/new", label: "New Job", icon: PlusCircle }
 ];
 
+function isNavItemActive(item, pathname) {
+  if (item.to === "/applications") {
+    return pathname === "/applications" || /^\/applications\/\d+(\/edit)?$/.test(pathname);
+  }
+  if (item.to === "/applications/ai-cv-matching") {
+    return pathname === item.to;
+  }
+  if (item.to === "/hr/jobs") {
+    return pathname === "/hr/jobs" || /^\/hr\/jobs\/\d+/.test(pathname);
+  }
+  if (item.to === "/hr/jobs/new") {
+    return pathname === item.to;
+  }
+  return pathname === item.to || pathname.startsWith(`${item.to}/`);
+}
+
 export function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const navItems = user?.role === "hr" ? hrNavItems : candidateNavItems;
   const appLabel = user?.role === "hr" ? "Internship Platform HR" : "Internship Tracker";
 
@@ -52,9 +70,9 @@ export function Layout() {
               key={item.to}
               to={item.to}
               end={item.to === "/"}
-              className={({ isActive }) =>
+              className={() =>
                 `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium ${
-                  isActive
+                  isNavItemActive(item, location.pathname)
                     ? "bg-zinc-900 text-white"
                     : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"
                 }`
@@ -95,9 +113,9 @@ export function Layout() {
                 key={item.to}
                 to={item.to}
                 end={item.to === "/"}
-                className={({ isActive }) =>
+                className={() =>
                   `inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${
-                    isActive ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700"
+                    isNavItemActive(item, location.pathname) ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700"
                   }`
                 }
               >

@@ -99,28 +99,25 @@ Health check: http://localhost:8001/health
 
 The backend runs `alembic upgrade head` before starting. It also creates tables on startup to keep the MVP forgiving during local development.
 The default host backend port is `8001` to avoid common local conflicts. To use port `8000`, set `BACKEND_PORT=8000` and `VITE_API_BASE_URL=http://localhost:8000` in `.env`.
+The app uses AWS RDS PostgreSQL through `DATABASE_URL`; Docker Compose does not start a local PostgreSQL container.
 
 ## Running Backend Without Docker
 
-If you run FastAPI directly with Uvicorn on Windows, `DATABASE_URL` must use `localhost`, not `db`. The hostname `db` only exists inside the Docker Compose network.
+If you run FastAPI directly with Uvicorn on Windows, use the same AWS RDS `DATABASE_URL` from `.env`.
 
-Use this in `.env` for direct local Uvicorn:
+Use this shape in `.env` and replace `<PASSWORD>` with the RDS database password:
 
 ```env
-DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/internship_tracker
+DATABASE_URL="postgresql://postgres:<PASSWORD>@internship-tracker-db.cd6umwocy4x5.ap-southeast-2.rds.amazonaws.com:5432/postgres?schema=public&sslmode=require"
 ```
+
+If the password contains special URL characters such as `@`, `#`, `/`, `:` or `%`, URL-encode them before placing the value in `DATABASE_URL`.
 
 Then run:
 
 ```bash
 cd backend
 uvicorn app.main:app --reload --port 8001
-```
-
-Docker Compose uses `DOCKER_DATABASE_URL` internally:
-
-```env
-DOCKER_DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/internship_tracker
 ```
 
 ## Running Frontend Without Docker
@@ -175,8 +172,7 @@ docker compose exec backend pytest
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | SQLAlchemy PostgreSQL connection string |
-| `DOCKER_DATABASE_URL` | Internal Docker Compose PostgreSQL URL using host `db` |
+| `DATABASE_URL` | AWS RDS PostgreSQL connection string used by FastAPI, Alembic, and Prisma |
 | `SECRET_KEY` | JWT signing secret |
 | `BACKEND_CORS_ORIGINS` | Comma-separated allowed frontend origins |
 | `BACKEND_PORT` | Host port mapped to the backend container |
@@ -405,7 +401,7 @@ Phase 2.5 does not add any new HR-side AI ranking or screening logic. The new ca
 
 - Frontend: build the React app with `npm run build` and deploy static files to Amazon S3 static hosting with CloudFront, or serve it from EC2.
 - Backend: deploy the FastAPI Docker image to EC2, ECS, or App Runner. A later version can adapt selected endpoints to Lambda and API Gateway.
-- Database: replace the Compose PostgreSQL service with Amazon RDS for PostgreSQL and set `DATABASE_URL`.
+- Database: use Amazon RDS for PostgreSQL and set `DATABASE_URL`.
 - File storage: set `STORAGE_BACKEND=s3`, configure `S3_BUCKET`, and grant the backend an IAM role with least-privilege S3 access. The app generates presigned download URLs for private S3 objects.
 - Logs: keep stdout logging and ship container logs to CloudWatch.
 - Secrets: store production secrets in AWS Secrets Manager, SSM Parameter Store, ECS secrets, or EC2 instance configuration.

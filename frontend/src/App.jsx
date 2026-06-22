@@ -17,6 +17,7 @@ import { HrJobEditor } from "./pages/HrJobEditor";
 import { HrJobs } from "./pages/HrJobs";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 import { RoleHomeRedirect } from "./routes/RoleHomeRedirect";
+import { AICVMatching } from "./pages/AICVMatching";
 import { ApplicationDetail } from "./pages/ApplicationDetail";
 import { ApplicationsList } from "./pages/ApplicationsList";
 import { CreateApplication } from "./pages/CreateApplication";
@@ -111,6 +112,14 @@ export default function App() {
           element={
             <ProtectedRoute allowedRoles={["candidate", "admin"]}>
               <CreateApplication />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="applications/ai-cv-matching"
+          element={
+            <ProtectedRoute allowedRoles={["candidate", "admin"]}>
+              <AICVMatching />
             </ProtectedRoute>
           }
         />

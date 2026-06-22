@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     APP_DEBUG: bool = True
 
-    DATABASE_URL: str = "sqlite:///./local_dev.db"
+    DATABASE_URL: str = ""
     SECRET_KEY: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440

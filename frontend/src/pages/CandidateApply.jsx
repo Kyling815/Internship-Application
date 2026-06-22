@@ -1,4 +1,3 @@
-import { FilePlus2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -79,14 +78,15 @@ export function CandidateApply() {
     }
   }
 
-  async function uploadCv() {
-    if (!uploadFile) return;
+  async function uploadCv(selectedFile) {
+    const fileToUpload = selectedFile || uploadFile;
+    if (!fileToUpload || isUploading) return;
     setError("");
     setSuccess("");
     setIsUploading(true);
     const formData = new FormData();
     formData.append("document_type", "CV");
-    formData.append("file", uploadFile);
+    formData.append("file", fileToUpload);
     try {
       const response = await uploadCandidateDocument(formData);
       const uploadedDocument = response.data;
@@ -153,30 +153,31 @@ export function CandidateApply() {
         </label>
 
         <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4">
-          <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+          <div className="grid gap-3">
             <label className="block">
               <span className="text-sm font-medium text-zinc-700">Upload CV</span>
               <input
                 key={uploadInputKey}
                 type="file"
                 accept=".pdf,.doc,.docx,.txt"
-                onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
+                disabled={isUploading}
+                onChange={(event) => {
+                  const selectedFile = event.target.files?.[0] || null;
+                  setUploadFile(selectedFile);
+                  if (selectedFile) uploadCv(selectedFile);
+                }}
                 className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700"
               />
             </label>
-            <button
-              type="button"
-              onClick={uploadCv}
-              disabled={isUploading || !uploadFile}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <FilePlus2 className="h-4 w-4" />
-              {isUploading ? "Uploading" : "Upload CV"}
-            </button>
           </div>
-          {uploadFile && (
+          {isUploading && (
+            <p className="mt-2 text-xs font-medium text-zinc-700">
+              Uploading CV...
+            </p>
+          )}
+          {uploadFile && !isUploading && (
             <p className="mt-2 text-xs text-zinc-500">
-              Ready to upload: {uploadFile.name}
+              Selected: {uploadFile.name}
             </p>
           )}
         </div>

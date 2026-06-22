@@ -1,25 +1,9 @@
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-internship_tracker}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-internship_tracker}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   backend:
     build:
       context: ./backend
     environment:
-      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql+psycopg2://postgres:postgres@db:5432/internship_tracker}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to your AWS RDS PostgreSQL URL}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
@@ -42,9 +26,6 @@ services:
     volumes:
       - ./backend/uploads:/app/uploads
       - ${USERPROFILE}/.aws:/root/.aws:ro
-    depends_on:
-      db:
-        condition: service_healthy
 
   frontend:
     build:
@@ -55,6 +36,3 @@ services:
       - "5173:5173"
     depends_on:
       - backend
-
-volumes:
-  postgres_data:

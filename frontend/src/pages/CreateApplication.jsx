@@ -27,11 +27,11 @@ export function CreateApplication() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-zinc-950">New application</h1>
-        <p className="mt-1 text-sm text-zinc-500">Add the role details and job description</p>
+        <h1 className="text-2xl font-semibold text-zinc-950">New saved application</h1>
+        <p className="mt-1 text-sm text-zinc-500">Save the role details and job description</p>
       </div>
       {error && <Alert>{error}</Alert>}
-      <ApplicationForm onSubmit={handleSubmit} isLoading={isLoading} submitLabel="Create application" />
+      <ApplicationForm onSubmit={handleSubmit} isLoading={isLoading} submitLabel="Save application" />
     </div>
   );
 }

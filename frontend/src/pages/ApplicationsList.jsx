@@ -9,6 +9,7 @@ import {
 import { getErrorMessage } from "../api/client";
 import { Alert } from "../components/Alert";
 import { StatusBadge } from "../components/StatusBadge";
+import { filterUserApplications } from "../utils/systemApplications";
 
 export function ApplicationsList() {
   const [applications, setApplications] = useState([]);
@@ -20,7 +21,7 @@ export function ApplicationsList() {
     setError("");
     try {
       const response = await getApplications();
-      setApplications(response.data);
+      setApplications(filterUserApplications(response.data));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -47,14 +48,14 @@ export function ApplicationsList() {
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-zinc-950">Applications</h1>
-          <p className="mt-1 text-sm text-zinc-500">Manage internship opportunities and next steps</p>
+          <h1 className="text-2xl font-semibold text-zinc-950">Saved</h1>
+          <p className="mt-1 text-sm text-zinc-500">Manage saved internship opportunities and next steps</p>
         </div>
         <Link
           to="/applications/new"
           className="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800"
         >
-          New application
+          New saved application
         </Link>
       </div>
 
@@ -64,7 +65,7 @@ export function ApplicationsList() {
         {isLoading ? (
           <p className="p-5 text-sm text-zinc-500">Loading applications</p>
         ) : applications.length === 0 ? (
-          <p className="p-5 text-sm text-zinc-500">No applications yet.</p>
+          <p className="p-5 text-sm text-zinc-500">No saved opportunities yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-zinc-200 text-sm">

@@ -8,12 +8,12 @@ from sqlalchemy import engine_from_config, pool
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import get_settings
-from app.db.database import Base
+from app.db.database import Base, get_sqlalchemy_database_url
 from app.db import models
 
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().DATABASE_URL)
+config.set_main_option("sqlalchemy.url", get_sqlalchemy_database_url(get_settings().DATABASE_URL))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

@@ -109,6 +109,27 @@ def test_candidate_direct_document_upload_creates_reusable_document(client):
     assert document["file_name"] == "direct_cv.txt"
     assert document["application_id"]
 
+    applications_response = client.get("/applications", headers=headers)
+    assert applications_response.status_code == 200
+    assert applications_response.json() == []
+
+    update_response = client.put(
+        f"/applications/{document['application_id']}",
+        json={
+            "company_name": "Edited",
+            "position_title": "Edited",
+            "job_description": "Edited",
+        },
+        headers=headers,
+    )
+    assert update_response.status_code == 400
+
+    delete_response = client.delete(
+        f"/applications/{document['application_id']}",
+        headers=headers,
+    )
+    assert delete_response.status_code == 400
+
     list_response = client.get("/candidate/documents", headers=headers)
     assert list_response.status_code == 200
     assert list_response.json()[0]["id"] == document["id"]
