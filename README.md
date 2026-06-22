@@ -75,11 +75,11 @@ docker-compose.yml
 README.md
 ```
 
-## Run The Full Project From The Root
+## Run Database, Backend, And Frontend Separately
 
-Run the commands in this section from the repository root, where `docker-compose.yml` is located.
+Run these commands from the repository root, where `docker-compose.yml` is located. Docker Compose does not start a local database; the backend connects to AWS RDS through `DATABASE_URL`.
 
-1. Copy the environment file if `.env` does not exist:
+Copy the environment file if `.env` does not exist:
 
 ```bash
 cp .env.example .env
@@ -91,7 +91,7 @@ PowerShell equivalent:
 Copy-Item .env.example .env
 ```
 
-2. Edit `.env` and configure `DATABASE_URL`, `SECRET_KEY`, storage, CORS, and the frontend API URL. For a local browser with the backend exposed on the same machine:
+Configure `.env` before starting anything. For local access:
 
 ```env
 BACKEND_PORT=8001
@@ -99,97 +99,80 @@ VITE_API_BASE_URL=http://localhost:8001
 BACKEND_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-For the full stack running on the current EC2 public IP:
+For EC2, replace `localhost` with the EC2 public IP in `VITE_API_BASE_URL` and `BACKEND_CORS_ORIGINS`.
 
-```env
-BACKEND_PORT=8001
-VITE_API_BASE_URL=http://<EC2_PUBLIC_IP>:8001
-BACKEND_CORS_ORIGINS=http://<EC2_PUBLIC_IP>:5173
-```
+### 1. Database Migration
 
-3. Build and start the full stack in the background:
-
-One-command startup on EC2/Linux also waits for both services and loads the idempotent demo seed:
+Build the backend image, apply migrations to RDS, and confirm the current revision:
 
 ```bash
-bash scripts/start.sh
-```
-
-PowerShell equivalent:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/start.ps1
-```
-
-The underlying manual startup command is:
-
-```bash
-docker compose up -d --build
-```
-
-The backend automatically runs `alembic upgrade head` before Uvicorn starts.
-
-4. Check container state and startup logs:
-
-```bash
-docker compose ps
-docker compose logs --tail=100 backend
-docker compose logs --tail=100 frontend
-```
-
-5. Verify the services:
-
-```bash
-curl --fail http://127.0.0.1:8001/health
-curl --fail http://127.0.0.1:5173
-```
-
-Open the app locally:
-
-```text
-Frontend: http://localhost:5173
-Backend API docs: http://localhost:8001/docs
-Health check: http://localhost:8001/health
-```
-
-For EC2, replace `localhost` with the EC2 public IP. Its security group must allow `5173` and `8001` only from the administrator's public IP while testing.
-
-Follow logs continuously:
-
-```bash
-docker compose logs -f
-```
-
-Apply migrations manually when needed:
-
-```bash
+docker compose build backend
 docker compose run --rm backend alembic upgrade head
 docker compose run --rm backend alembic current
 ```
 
-Run backend tests and the frontend production build:
+### 2. Backend And Seed Data
+
+Start only the backend:
+
+```bash
+docker compose up -d --no-deps backend
+docker compose logs --tail=100 backend
+curl --fail http://127.0.0.1:8001/health
+```
+
+Load the idempotent demo seed after the backend is healthy:
+
+```bash
+docker compose exec -T backend python -m app.seed
+```
+
+Backend endpoints:
+
+```text
+API docs: http://localhost:8001/docs
+Health: http://localhost:8001/health
+```
+
+### 3. Frontend
+
+Start only the frontend without asking Compose to manage its backend dependency:
+
+```bash
+docker compose up -d --build --no-deps frontend
+docker compose logs --tail=100 frontend
+curl --fail http://127.0.0.1:5173
+```
+
+Open `http://localhost:5173`. For EC2, replace `localhost` with the EC2 public IP and allow ports `5173` and `8001` only from the administrator's public IP while testing.
+
+### Manage Services Separately
+
+```bash
+# Follow logs
+docker compose logs -f backend
+docker compose logs -f frontend
+
+# Restart one service
+docker compose restart backend
+docker compose restart frontend
+
+# Stop one service
+docker compose stop frontend
+docker compose stop backend
+
+# Remove both application containers and their network
+docker compose down
+```
+
+Run checks separately:
 
 ```bash
 docker compose run --rm backend pytest
 docker compose run --rm frontend npm run build
 ```
 
-Restart the services after configuration changes:
-
-```bash
-docker compose down
-docker compose up -d --build
-```
-
-Stop the project without deleting RDS or S3 data:
-
-```bash
-docker compose down
-```
-
-The backend also creates tables on startup to keep the MVP forgiving during local development.
-The default host backend port is `8001` to avoid common local conflicts. To use port `8000`, set `BACKEND_PORT=8000` and `VITE_API_BASE_URL=http://localhost:8000` in `.env`.
-The app uses AWS RDS PostgreSQL through `DATABASE_URL`; Docker Compose does not start a local PostgreSQL container.
+The backend image also runs `alembic upgrade head` before Uvicorn starts. The default host backend port is `8001`.
 
 ## Running Backend Without Docker
 
