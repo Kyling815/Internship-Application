@@ -4,7 +4,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Montserrat", "ui-sans-serif", "system-ui", "sans-serif"]
+        sans: ["Afacad Flux", "Montserrat", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["Fraunces", "Afacad Flux", "serif"]
       }
     }
   },

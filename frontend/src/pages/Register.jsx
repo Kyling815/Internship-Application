@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import { getErrorMessage } from "../api/client";
 import { Alert } from "../components/Alert";
+import { AppFooter } from "../components/AppFooter";
 import { useAuth } from "../context/AuthContext";
 import { USER_ROLES } from "../constants";
 import { getRoleHomePath } from "../routes/RoleHomeRedirect";
@@ -41,14 +42,15 @@ export function Register() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 py-10">
-      <div className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+    <div className="aesthetic-auth flex min-h-screen flex-col px-4 py-8">
+      <div className="flex flex-1 items-center justify-center">
+        <div className="aesthetic-auth-card w-full max-w-md p-6">
         <div className="mb-6 flex items-center gap-3">
-          <div className="rounded-lg bg-emerald-600 p-3 text-white">
+          <div className="aesthetic-auth-mark p-3">
             <UserPlus className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-zinc-950">Create account</h1>
+            <h1>Create account</h1>
             <p className="text-sm text-zinc-500">Track applications and AI matches</p>
           </div>
         </div>
@@ -108,6 +110,10 @@ export function Register() {
         <p className="mt-5 text-center text-sm text-zinc-600">
           Already registered? <Link to="/login" className="font-semibold text-zinc-950">Sign in</Link>
         </p>
+        </div>
+      </div>
+      <div className="mx-auto w-full max-w-5xl">
+        <AppFooter tone="auth" />
       </div>
     </div>
   );

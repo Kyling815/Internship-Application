@@ -27,7 +27,7 @@ function LogoGroup({ hidden = false }) {
 
 export function LogoMarquee() {
   return (
-    <section className="logo-marquee" aria-labelledby="logo-marquee-title">
+    <section className="logo-marquee" id="companies" aria-labelledby="logo-marquee-title">
       <div className="logo-marquee__intro">
         <p className="homepage-eyebrow">Opportunity landscape</p>
         <h2 id="logo-marquee-title">Explore opportunities across leading industries.</h2>

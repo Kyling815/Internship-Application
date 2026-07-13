@@ -4,6 +4,7 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { getErrorMessage } from "../api/client";
 import { Alert } from "../components/Alert";
+import { AppFooter } from "../components/AppFooter";
 import { useAuth } from "../context/AuthContext";
 import { getRoleHomePath } from "../routes/RoleHomeRedirect";
 
@@ -40,14 +41,15 @@ export function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 py-10">
-      <div className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+    <div className="aesthetic-auth flex min-h-screen flex-col px-4 py-8">
+      <div className="flex flex-1 items-center justify-center">
+        <div className="aesthetic-auth-card w-full max-w-md p-6">
         <div className="mb-6 flex items-center gap-3">
-          <div className="rounded-lg bg-zinc-900 p-3 text-white">
+          <div className="aesthetic-auth-mark p-3">
             <BriefcaseBusiness className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-zinc-950">Internship Tracker</h1>
+            <h1>Internship Tracker</h1>
             <p className="text-sm text-zinc-500">Sign in to continue</p>
           </div>
         </div>
@@ -84,6 +86,10 @@ export function Login() {
         <p className="mt-5 text-center text-sm text-zinc-600">
           No account? <Link to="/register" className="font-semibold text-zinc-950">Create one</Link>
         </p>
+        </div>
+      </div>
+      <div className="mx-auto w-full max-w-5xl">
+        <AppFooter tone="auth" />
       </div>
     </div>
   );

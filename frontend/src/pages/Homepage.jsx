@@ -20,11 +20,12 @@ import {
   QrCode,
   Facebook,
   Youtube,
-  Instagram
+  Instagram,
+  Search
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 import { LogoMarquee } from "../components/home/LogoMarquee";
@@ -52,9 +53,9 @@ const images = {
 };
 
 const navItems = [
-  { label: "Opportunities", href: "#opportunities" },
-  { label: "Application tracker", href: "#tracker" },
-  { label: "Profile", href: "#profile" },
+  { label: "Browse Internships", href: "#opportunities" },
+  { label: "Career Paths", href: "#resources" },
+  { label: "Companies", href: "#companies" },
   { label: "Resources", href: "#resources" }
 ];
 
@@ -615,11 +616,21 @@ function FinalCta() {
 
 export function Homepage() {
   const [showBranches, setShowBranches] = useState(false);
+  const [heroSearch, setHeroSearch] = useState("");
+  const shouldReduceMotion = useReducedMotion();
+  const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
 
   if (isAuthenticated) {
     const dashboardPath = user?.role === "hr" ? "/hr/dashboard" : "/candidate/dashboard";
     return <Navigate to={dashboardPath} replace />;
+  }
+
+  function handleHeroSearch(event) {
+    event.preventDefault();
+    const params = new URLSearchParams();
+    if (heroSearch.trim()) params.set("keyword", heroSearch.trim());
+    navigate(`/candidate/jobs${params.toString() ? `?${params.toString()}` : ""}`);
   }
 
   return (
@@ -629,11 +640,23 @@ export function Homepage() {
         <section className="homepage-hero" aria-labelledby="homepage-title">
           <Reveal className="homepage-hero__copy">
             <p className="homepage-eyebrow">Internship readiness for students</p>
-            <h1 id="homepage-title">Turn internship searching into a clear next step.</h1>
+            <h1 id="homepage-title">Your first opportunity should feel like the right one.</h1>
             <p>
-              Build a candidate profile, discover internships that fit your direction, and track every application from
-              saved role to final decision.
+              Discover internships matched to your skills, apply with confidence, and track every step in one place.
             </p>
+            <form className="homepage-search" onSubmit={handleHeroSearch} role="search" aria-label="Search internships">
+              <label htmlFor="homepage-internship-search">Search internships</label>
+              <div className="homepage-search__control">
+                <Search className="h-5 w-5" aria-hidden="true" />
+                <input
+                  id="homepage-internship-search"
+                  value={heroSearch}
+                  onChange={(event) => setHeroSearch(event.target.value)}
+                  placeholder="Try product design, data, backend..."
+                />
+                <button type="submit">Search</button>
+              </div>
+            </form>
             <div className="homepage-hero__actions">
               <Link to="/register" className="homepage-button homepage-button--primary">
                 Create candidate profile
@@ -650,6 +673,24 @@ export function Homepage() {
           </Reveal>
           <Reveal className="homepage-hero__visual" delay={0.08}>
             <HeroVisual />
+            <motion.div
+              className="homepage-floating-card homepage-floating-card--match"
+              animate={shouldReduceMotion ? undefined : { y: [0, -5, 0] }}
+              transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <span>Job Match</span>
+              <strong>84%</strong>
+              <small>Product Design Intern</small>
+            </motion.div>
+            <motion.div
+              className="homepage-floating-card homepage-floating-card--interview"
+              animate={shouldReduceMotion ? undefined : { y: [0, 4, 0] }}
+              transition={{ duration: 5.8, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <span>Interview scheduled</span>
+              <strong>Tue 10:30</strong>
+              <small>Northstar Labs</small>
+            </motion.div>
           </Reveal>
         </section>
         <LogoMarquee />
@@ -760,7 +801,7 @@ export function Homepage() {
             <div className="footer-branches-grid">
               <div className="branch-item">
                 <h5>Ho Chi Minh City Branch</h5>
-                <p>Floor 2, 3, Viettel Tower B, 285 Cach Mang Thang Tam, Hoa Hung Ward, District 10, Ho Chi Minh City, Vietnam</p>
+                <p>Floor 26, Bitexco financial tower, 2,Hai Trieu Street, Sai Gon District, Vietnam</p>
                 <p>Hotline: 1900 1881</p>
               </div>
               <div className="branch-item">
