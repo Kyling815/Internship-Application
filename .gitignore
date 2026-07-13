@@ -1,6 +1,9 @@
 .env
+ai_service/.env
 __pycache__/
+**/__pycache__/
 *.py[cod]
+*.pyc
 .pytest_cache/
 .coverage
 htmlcov/
@@ -17,4 +20,3 @@ node_modules/
 # Local Qwen AI files
 .venv-qwen/
 models/
-

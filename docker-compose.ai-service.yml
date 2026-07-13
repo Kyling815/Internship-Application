@@ -1,0 +1,36 @@
+# Standalone Qwen3-Reranker AI service compose file.
+# Requires NVIDIA Container Toolkit for GPU access.
+services:
+  ai-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.ai-service
+    ports:
+      - "8010:8010"
+    volumes:
+      # Model weights stay local and are mounted read-only at runtime.
+      - ./models:/app/models:ro
+    env_file:
+      # Optional. If missing, the image and app defaults are still usable.
+      - path: ./ai_service/.env
+        required: false
+    environment:
+      QWEN_RERANKER_MODEL_PATH: ${QWEN_RERANKER_MODEL_PATH:-/app/models/qwen3-reranker-0.6b}
+      QWEN_RERANKER_DEVICE: ${QWEN_RERANKER_DEVICE:-auto}
+      QWEN_SCORE_TEMPERATURE: ${QWEN_SCORE_TEMPERATURE:-3.0}
+      QWEN_MAX_TEXT_CHARS: ${QWEN_MAX_TEXT_CHARS:-12000}
+      QWEN_MAX_PAIRS: ${QWEN_MAX_PAIRS:-128}
+      QWEN_MAX_CANDIDATES: ${QWEN_MAX_CANDIDATES:-50}
+      QWEN_BATCH_PAIR_SIZE: ${QWEN_BATCH_PAIR_SIZE:-32}
+      QWEN_BATCH_MAX_TOTAL_PAIRS: ${QWEN_BATCH_MAX_TOTAL_PAIRS:-512}
+      AI_SERVICE_HOST: ${AI_SERVICE_HOST:-0.0.0.0}
+      AI_SERVICE_PORT: ${AI_SERVICE_PORT:-8010}
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
