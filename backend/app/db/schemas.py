@@ -114,6 +114,40 @@ class DocumentDownloadUrl(BaseModel):
     expires_in: int
 
 
+class DocumentTextStatusResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    document_id: int
+    parser_name: str
+    parser_version: str
+    text_hash: str | None
+    extraction_status: str
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DocumentTextResponse(DocumentTextStatusResponse):
+    raw_text: str | None
+    blocks_json: list[dict] | None
+    semantic_groups_json: list[dict] | None
+
+
+class DocumentTextExtractResponse(DocumentTextResponse):
+    skipped_cached: bool = False
+
+
+class BulkApplicantTextExtractionResponse(BaseModel):
+    job_id: int
+    total_documents: int
+    succeeded: int
+    failed: int
+    unsupported: int
+    skipped_cached: int
+    results: list[DocumentTextExtractResponse]
+
+
 class CandidateProfileBase(BaseModel):
     full_name: str | None = Field(default=None, max_length=255)
     university: str | None = Field(default=None, max_length=255)

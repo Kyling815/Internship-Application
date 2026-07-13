@@ -9,6 +9,7 @@ from fastapi import HTTPException, UploadFile, status
 from app.core.config import get_settings
 from app.services.s3_service import (
     delete_file_from_s3,
+    get_bytes_from_s3,
     generate_presigned_url,
     get_text_from_s3,
     put_bytes_to_s3,
@@ -117,6 +118,15 @@ class StorageService:
         if not target.exists():
             raise HTTPException(status_code=404, detail="Stored file not found")
         return target.read_text(encoding="utf-8", errors="replace")
+
+    def read_file_bytes(self, key: str) -> bytes:
+        if self.backend == "s3":
+            return get_bytes_from_s3(key)
+
+        target = Path(self.settings.LOCAL_UPLOAD_DIR) / key
+        if not target.exists():
+            raise HTTPException(status_code=404, detail="Stored file not found")
+        return target.read_bytes()
 
     def generate_download_url(self, key: str, fallback_url: str | None = None, expires_in: int = 3600) -> str:
         if self.backend == "s3":

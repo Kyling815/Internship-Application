@@ -79,3 +79,8 @@ def delete_file_from_s3(file_key: str):
 def get_text_from_s3(file_key: str) -> str:
     obj = _s3_client().get_object(Bucket=_bucket_name(), Key=file_key)
     return obj["Body"].read().decode("utf-8", errors="replace")
+
+
+def get_bytes_from_s3(file_key: str) -> bytes:
+    obj = _s3_client().get_object(Bucket=_bucket_name(), Key=file_key)
+    return obj["Body"].read()

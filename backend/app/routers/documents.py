@@ -2,12 +2,13 @@ import logging
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.db import models, schemas
 from app.db.database import get_db
 from app.dependencies import require_application_owner, require_role
+from app.services.document_text_service import document_text_payload, extract_document_text
 from app.services.s3_service import generate_presigned_url, put_bytes_to_s3
 from app.services.storage_service import StorageService
 
@@ -53,6 +54,44 @@ def get_document_for_user(
             detail="You do not have access to this document",
         )
     return document
+
+
+def get_document_for_text_access(
+    db: Session,
+    document_id: int,
+    current_user: models.User,
+) -> models.Document:
+    document = db.get(models.Document, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if current_user.role == "admin":
+        return document
+
+    if current_user.role == "candidate":
+        return get_document_for_user(db, document_id, current_user)
+
+    if current_user.role == "hr":
+        link = (
+            db.query(models.JobApplicationDocument)
+            .join(models.JobApplication, models.JobApplicationDocument.job_application_id == models.JobApplication.id)
+            .join(models.JobPosting, models.JobApplication.job_posting_id == models.JobPosting.id)
+            .join(models.Company, models.JobPosting.company_id == models.Company.id)
+            .filter(
+                models.JobApplicationDocument.document_id == document_id,
+                models.Company.owner_user_id == current_user.id,
+                models.JobApplicationDocument.document_type == "CV",
+            )
+            .first()
+        )
+        if link:
+            return document
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You do not have access to this document",
+    )
 
 
 def validate_document_type(document_type: str) -> str:
@@ -280,3 +319,49 @@ def get_document_download_url(
     except Exception as exc:
         logger.exception("document_download_url_failed user_id=%s document_id=%s", current_user.id, document_id)
         raise HTTPException(status_code=500, detail="Unable to generate download URL") from exc
+
+
+@router.post("/documents/{document_id}/extract-text", response_model=schemas.DocumentTextExtractResponse)
+def extract_document_text_endpoint(
+    document_id: int,
+    force: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("candidate", "hr", "admin")),
+):
+    document = get_document_for_text_access(db, document_id, current_user)
+    result = extract_document_text(db, document, force=force)
+    return document_text_payload(result.document_text, skipped_cached=result.skipped_cached)
+
+
+@router.get("/documents/{document_id}/extracted-text-status", response_model=schemas.DocumentTextStatusResponse)
+def get_extracted_text_status(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("candidate", "hr", "admin")),
+):
+    get_document_for_text_access(db, document_id, current_user)
+    document_text = (
+        db.query(models.DocumentText)
+        .filter(models.DocumentText.document_id == document_id)
+        .first()
+    )
+    if not document_text:
+        raise HTTPException(status_code=404, detail="Document text has not been extracted")
+    return document_text
+
+
+@router.get("/documents/{document_id}/text", response_model=schemas.DocumentTextResponse)
+def get_extracted_text(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("candidate", "hr", "admin")),
+):
+    get_document_for_text_access(db, document_id, current_user)
+    document_text = (
+        db.query(models.DocumentText)
+        .filter(models.DocumentText.document_id == document_id)
+        .first()
+    )
+    if not document_text:
+        raise HTTPException(status_code=404, detail="Document text has not been extracted")
+    return document_text

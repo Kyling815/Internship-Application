@@ -120,6 +120,12 @@ class Document(Base):
 
     user = relationship("User", back_populates="documents")
     application = relationship("InternshipApplication", back_populates="documents")
+    extracted_text = relationship(
+        "DocumentText",
+        back_populates="document",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
     job_application_links = relationship(
         "JobApplicationDocument",
         back_populates="document",
@@ -280,6 +286,30 @@ class ApplicationStatusHistory(Base):
 
     job_application = relationship("JobApplication", back_populates="status_history")
     changed_by_user = relationship("User", back_populates="status_changes", foreign_keys=[changed_by_user_id])
+
+
+class DocumentText(Base):
+    __tablename__ = "document_texts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    raw_text = Column(Text, nullable=True)
+    blocks_json = Column(JSON, nullable=True)
+    semantic_groups_json = Column(JSON, nullable=True)
+    parser_name = Column(String(100), nullable=False)
+    parser_version = Column(String(100), nullable=False)
+    text_hash = Column(String(128), nullable=True, index=True)
+    extraction_status = Column(String(50), default="pending", nullable=False, index=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    document = relationship("Document", back_populates="extracted_text")
 
 
 class AIAnalysisResult(Base):

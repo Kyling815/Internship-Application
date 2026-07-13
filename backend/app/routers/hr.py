@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.db import models, schemas
@@ -15,6 +15,7 @@ from app.routers.platform_helpers import (
     serialize_job_application_detail,
     serialize_job_posting,
 )
+from app.services.document_text_service import document_text_payload, extract_document_text
 from app.services.storage_service import StorageService
 
 
@@ -337,4 +338,53 @@ def get_hr_document_download_url(
         "document_id": link.document.id,
         "download_url": download_url,
         "expires_in": 3600,
+    }
+
+
+@router.post(
+    "/jobs/{job_id}/applicants/extract-text",
+    response_model=schemas.BulkApplicantTextExtractionResponse,
+)
+def extract_text_for_job_applicants(
+    job_id: int,
+    force: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("hr", "admin")),
+):
+    job = require_job_owner(job_id, db, current_user)
+    applications = (
+        db.query(models.JobApplication)
+        .options(
+            joinedload(models.JobApplication.attached_documents).joinedload(models.JobApplicationDocument.document),
+        )
+        .filter(models.JobApplication.job_posting_id == job.id)
+        .all()
+    )
+
+    documents_by_id: dict[int, models.Document] = {}
+    for application in applications:
+        for link in application.attached_documents:
+            if link.document_type == "CV" and link.document:
+                documents_by_id[link.document_id] = link.document
+
+    counts = {
+        "succeeded": 0,
+        "failed": 0,
+        "unsupported": 0,
+        "skipped_cached": 0,
+    }
+    results = []
+    for document in documents_by_id.values():
+        result = extract_document_text(db, document, force=force)
+        if result.skipped_cached:
+            counts["skipped_cached"] += 1
+        elif result.document_text.extraction_status in counts:
+            counts[result.document_text.extraction_status] += 1
+        results.append(document_text_payload(result.document_text, skipped_cached=result.skipped_cached))
+
+    return {
+        "job_id": job.id,
+        "total_documents": len(documents_by_id),
+        **counts,
+        "results": results,
     }

@@ -4,13 +4,14 @@ from app.db import models
 from app.db.database import SessionLocal
 
 
-def auth_headers(client, email="docs@example.edu"):
+def auth_headers(client, email="docs@example.edu", role="candidate"):
     client.post(
         "/auth/register",
         json={
             "email": email,
             "full_name": "Document Tester",
             "password": "password123",
+            "role": role,
         },
     )
     response = client.post(
@@ -182,3 +183,170 @@ def test_document_routes_reject_cross_user_access(client):
         headers=other_headers,
     )
     assert delete_response.status_code == 403
+
+
+def test_candidate_can_extract_pdf_text_and_read_cached_result(client, monkeypatch):
+    headers = auth_headers(client, "pdf-candidate@example.edu")
+    application = create_application(client, headers)
+    upload_response = upload_document(
+        client,
+        application["id"],
+        headers,
+        filename="cv.pdf",
+        content=b"fake pdf bytes",
+    )
+    assert upload_response.status_code == 201
+    document = upload_response.json()
+
+    monkeypatch.setattr(
+        "app.services.document_text_service.extract_pdf_pages",
+        lambda file_bytes: [
+            {
+                "page": 1,
+                "text": (
+                    "SUMMARY\nBackend intern candidate\n"
+                    "PROJECTS\n- Built FastAPI APIs with PostgreSQL\n"
+                    "- Deployed services on AWS\n"
+                    "EDUCATION\nExample University"
+                ),
+            }
+        ],
+    )
+
+    extract_response = client.post(
+        f"/documents/{document['id']}/extract-text",
+        headers=headers,
+    )
+    assert extract_response.status_code == 200
+    payload = extract_response.json()
+    assert payload["extraction_status"] == "succeeded"
+    assert payload["skipped_cached"] is False
+    assert "FastAPI" in payload["raw_text"]
+    assert payload["blocks_json"]
+    assert {group["group_name"] for group in payload["semantic_groups_json"]}
+
+    cached_response = client.post(
+        f"/documents/{document['id']}/extract-text",
+        headers=headers,
+    )
+    assert cached_response.status_code == 200
+    assert cached_response.json()["skipped_cached"] is True
+
+    status_response = client.get(
+        f"/documents/{document['id']}/extracted-text-status",
+        headers=headers,
+    )
+    assert status_response.status_code == 200
+    assert status_response.json()["text_hash"]
+
+    text_response = client.get(f"/documents/{document['id']}/text", headers=headers)
+    assert text_response.status_code == 200
+    assert text_response.json()["semantic_groups_json"]
+
+
+def test_non_pdf_document_extraction_is_unsupported(client):
+    headers = auth_headers(client, "unsupported-candidate@example.edu")
+    application = create_application(client, headers)
+    upload_response = upload_document(client, application["id"], headers)
+    assert upload_response.status_code == 201
+    document = upload_response.json()
+
+    extract_response = client.post(
+        f"/documents/{document['id']}/extract-text",
+        headers=headers,
+    )
+    assert extract_response.status_code == 200
+    assert extract_response.json()["extraction_status"] == "unsupported"
+
+
+def test_hr_can_extract_attached_cv_text_and_bulk_extract_applicants(client, monkeypatch):
+    hr_headers = auth_headers(client, "text-hr@example.edu", role="hr")
+    company_response = client.post(
+        "/companies",
+        json={
+            "name": "Text Labs",
+            "description": "Text extraction tests.",
+            "website": None,
+            "industry": "Technology",
+            "location": "Singapore",
+            "logo_url": None,
+        },
+        headers=hr_headers,
+    )
+    assert company_response.status_code == 201
+
+    job_response = client.post(
+        "/hr/jobs",
+        json={
+            "title": "Backend Intern",
+            "description": "Build backend APIs.",
+            "requirements": "FastAPI and SQL",
+            "responsibilities": "Ship API features",
+            "location": "Singapore",
+            "employment_type": "internship",
+            "work_mode": "hybrid",
+            "salary_min": 0,
+            "salary_max": 0,
+            "deadline": "2026-12-31",
+            "status": "published",
+        },
+        headers=hr_headers,
+    )
+    assert job_response.status_code == 201
+    job = job_response.json()
+
+    candidate_headers = auth_headers(client, "text-candidate@example.edu")
+    application = create_application(client, candidate_headers)
+    upload_response = upload_document(
+        client,
+        application["id"],
+        candidate_headers,
+        filename="submitted_cv.pdf",
+        content=b"fake pdf bytes",
+    )
+    assert upload_response.status_code == 201
+    document = upload_response.json()
+
+    apply_response = client.post(
+        f"/jobs/{job['id']}/apply",
+        json={
+            "cover_letter_text": None,
+            "candidate_note": None,
+            "document_ids": [document["id"]],
+        },
+        headers=candidate_headers,
+    )
+    assert apply_response.status_code == 201
+
+    monkeypatch.setattr(
+        "app.services.document_text_service.extract_pdf_pages",
+        lambda file_bytes: [
+            {
+                "page": 1,
+                "text": "PROJECTS\n- Built FastAPI APIs\nEDUCATION\nExample University",
+            }
+        ],
+    )
+
+    other_hr_headers = auth_headers(client, "other-text-hr@example.edu", role="hr")
+    forbidden_response = client.post(
+        f"/documents/{document['id']}/extract-text",
+        headers=other_hr_headers,
+    )
+    assert forbidden_response.status_code == 404
+
+    extract_response = client.post(
+        f"/documents/{document['id']}/extract-text",
+        headers=hr_headers,
+    )
+    assert extract_response.status_code == 200
+    assert extract_response.json()["extraction_status"] == "succeeded"
+
+    bulk_response = client.post(
+        f"/hr/jobs/{job['id']}/applicants/extract-text",
+        headers=hr_headers,
+    )
+    assert bulk_response.status_code == 200
+    bulk_payload = bulk_response.json()
+    assert bulk_payload["total_documents"] == 1
+    assert bulk_payload["skipped_cached"] == 1
