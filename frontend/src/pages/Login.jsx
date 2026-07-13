@@ -1,6 +1,6 @@
 import { BriefcaseBusiness } from "lucide-react";
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { getErrorMessage } from "../api/client";
 import { Alert } from "../components/Alert";
@@ -15,6 +15,14 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Use the isAuthenticated from useAuth instead of checking user directly
+  const { isAuthenticated, user } = useAuth();
+  
+  if (isAuthenticated) {
+    const dashboardPath = user?.role === "hr" ? "/hr/dashboard" : "/candidate/dashboard";
+    return <Navigate to={dashboardPath} replace />;
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();

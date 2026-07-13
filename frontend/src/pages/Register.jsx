@@ -1,6 +1,6 @@
 import { UserPlus } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import { getErrorMessage } from "../api/client";
 import { Alert } from "../components/Alert";
@@ -14,6 +14,13 @@ export function Register() {
   const [form, setForm] = useState({ full_name: "", email: "", password: "", role: "candidate" });
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const { isAuthenticated, user } = useAuth();
+
+  if (isAuthenticated) {
+    const dashboardPath = user?.role === "hr" ? "/hr/dashboard" : "/candidate/dashboard";
+    return <Navigate to={dashboardPath} replace />;
+  }
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
