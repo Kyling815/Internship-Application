@@ -1,3 +1,4 @@
+import { ArrowLeft, FileUp, Paperclip, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -6,6 +7,18 @@ import { getErrorMessage } from "../api/client";
 import { uploadCandidateDocument } from "../api/documents";
 import { applyToJob, getJob } from "../api/jobs";
 import { Alert } from "../components/Alert";
+import {
+  CandidateButton,
+  CandidateEmptyState,
+  CandidateHero,
+  CandidateLoading,
+  CandidatePage,
+  CandidateSection,
+  CandidateSpinner,
+  CandidateTextarea,
+  formatDate,
+  formatDateTime
+} from "../components/candidate/CandidateUI";
 
 export function CandidateApply() {
   const { jobId } = useParams();
@@ -109,53 +122,92 @@ export function CandidateApply() {
     }
   }
 
-  if (isLoading) return <p className="text-sm text-zinc-500">Loading application form</p>;
+  if (isLoading) return <CandidateLoading label="Loading application form" />;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-zinc-950">Apply to {job?.title}</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Upload a CV or attach existing tracker documents before submitting your application.
+    <CandidatePage>
+      <Link to={`/candidate/jobs/${jobId}`} className="inline-flex w-fit items-center gap-2 text-sm font-extrabold text-[var(--candidate-muted)] hover:text-[var(--candidate-primary)]">
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        Back to job
+      </Link>
+
+      <CandidateHero
+        eyebrow={job?.company.name || "Application"}
+        title={`Apply to ${job?.title || "this role"}`}
+        copy="Attach the evidence HR needs first, then add a short note only where it helps your application."
+      >
+        <p className="mt-4 text-sm font-bold text-[var(--candidate-muted)]">
+          Deadline: {formatDate(job?.deadline)}
         </p>
-      </div>
+      </CandidateHero>
 
       {error && <Alert>{error}</Alert>}
       {success && <Alert type="success">{success}</Alert>}
 
-      <form onSubmit={handleSubmit} className="space-y-5 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-          <p className="text-sm font-semibold text-zinc-950">{job?.company.name}</p>
-          <p className="mt-1 text-sm text-zinc-600">{job?.title}</p>
-          <p className="mt-2 text-sm text-zinc-500">
-            {job?.deadline ? `Deadline: ${job.deadline}` : "No deadline listed"}
-          </p>
+      <form onSubmit={handleSubmit} className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="space-y-5">
+          <CandidateSection eyebrow="Message" title="Application notes">
+            <div className="grid gap-4">
+              <CandidateTextarea
+                label="Cover letter"
+                rows="8"
+                value={coverLetterText}
+                onChange={(event) => setCoverLetterText(event.target.value)}
+                helper="Optional. Keep it specific to the role and company."
+              />
+              <CandidateTextarea
+                label="Candidate note"
+                rows="4"
+                value={candidateNote}
+                onChange={(event) => setCandidateNote(event.target.value)}
+                helper="Optional private context for HR, such as availability or preferred schedule."
+              />
+            </div>
+          </CandidateSection>
+
+          <CandidateSection eyebrow="Documents" title="Attach existing documents" action={<CandidateButton to="/applications" variant="secondary">Manage tracker documents</CandidateButton>}>
+            <div className="space-y-3">
+              {documents.length === 0 && (
+                <CandidateEmptyState title="No uploaded documents yet">
+                  Upload a CV in the panel beside this form, or add documents from your tracker.
+                </CandidateEmptyState>
+              )}
+              {documents.map((document) => {
+                const selected = selectedDocumentIds.includes(document.id);
+                return (
+                  <label
+                    key={document.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition ${
+                      selected
+                        ? "border-[var(--candidate-primary)] bg-[var(--candidate-surface-soft)]"
+                        : "border-[var(--candidate-border)] bg-white hover:border-[var(--candidate-border-strong)]"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => toggleDocument(document.id)}
+                      className="mt-1 h-4 w-4 rounded border-[var(--candidate-border-strong)] text-[var(--candidate-primary)] focus:ring-[var(--candidate-primary)]"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-extrabold text-[var(--candidate-ink-strong)]">{document.file_name}</p>
+                      <p className="mt-1 text-xs font-bold uppercase tracking-wide text-[var(--candidate-primary)]">{document.document_type}</p>
+                      <p className="mt-1 text-xs text-[var(--candidate-muted)]">Uploaded {formatDateTime(document.created_at)}</p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </CandidateSection>
         </div>
 
-        <label className="block">
-          <span className="text-sm font-medium text-zinc-700">Cover letter</span>
-          <textarea
-            rows="8"
-            value={coverLetterText}
-            onChange={(event) => setCoverLetterText(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-200"
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-zinc-700">Candidate note</span>
-          <textarea
-            rows="4"
-            value={candidateNote}
-            onChange={(event) => setCandidateNote(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-200"
-          />
-        </label>
-
-        <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-4">
-          <div className="grid gap-3">
-            <label className="block">
-              <span className="text-sm font-medium text-zinc-700">Upload CV</span>
+        <aside className="space-y-5 xl:sticky xl:top-6 xl:self-start">
+          <CandidateSection eyebrow="Upload" title="Add a CV">
+            <label className="block rounded-lg border border-dashed border-[var(--candidate-border-strong)] bg-[var(--candidate-surface-soft)] p-5">
+              <span className="flex items-center gap-2 text-sm font-extrabold text-[var(--candidate-ink-strong)]">
+                <FileUp className="h-4 w-4 text-[var(--candidate-primary)]" aria-hidden="true" />
+                Upload CV
+              </span>
               <input
                 key={uploadInputKey}
                 type="file"
@@ -166,62 +218,55 @@ export function CandidateApply() {
                   setUploadFile(selectedFile);
                   if (selectedFile) uploadCv(selectedFile);
                 }}
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700"
+                className="mt-3 w-full rounded-lg border border-[var(--candidate-border)] bg-white px-3 py-2 text-sm text-[var(--candidate-ink)]"
               />
             </label>
-          </div>
-          {isUploading && (
-            <p className="mt-2 text-xs font-medium text-zinc-700">
-              Uploading CV...
-            </p>
-          )}
-          {uploadFile && !isUploading && (
-            <p className="mt-2 text-xs text-zinc-500">
-              Selected: {uploadFile.name}
-            </p>
-          )}
-        </div>
+            <div className="mt-3">
+              {isUploading && <CandidateSpinner label="Uploading CV" />}
+              {uploadFile && !isUploading && (
+                <p className="text-xs text-[var(--candidate-muted)]">Selected: {uploadFile.name}</p>
+              )}
+            </div>
+          </CandidateSection>
 
-        <div>
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-sm font-medium text-zinc-700">Attach existing documents</span>
-            <Link to="/applications" className="text-sm font-medium text-zinc-700 hover:text-zinc-950">
-              Manage tracker documents
-            </Link>
-          </div>
-          <div className="mt-3 space-y-3">
-            {documents.length === 0 && (
-              <div className="rounded-lg border border-dashed border-zinc-300 p-4 text-sm text-zinc-500">
-                You do not have any uploaded documents yet. Upload a CV above or add documents from your tracker.
-              </div>
+          <CandidateSection eyebrow="Review" title="Submission summary">
+            <div className="space-y-3 text-sm text-[var(--candidate-ink)]">
+              <p className="flex items-center justify-between gap-3">
+                <span>Attached documents</span>
+                <strong>{selectedDocumentIds.length}</strong>
+              </p>
+              <p className="flex items-center justify-between gap-3">
+                <span>Cover letter</span>
+                <strong>{coverLetterText.trim() ? "Added" : "Optional"}</strong>
+              </p>
+              <p className="flex items-center justify-between gap-3">
+                <span>Candidate note</span>
+                <strong>{candidateNote.trim() ? "Added" : "Optional"}</strong>
+              </p>
+            </div>
+            <CandidateButton
+              type="submit"
+              disabled={isSubmitting || isUploading || selectedDocumentIds.length === 0}
+              className="mt-5 w-full"
+            >
+              {isSubmitting ? (
+                "Submitting"
+              ) : (
+                <>
+                  <Send className="h-4 w-4" aria-hidden="true" />
+                  Submit application
+                </>
+              )}
+            </CandidateButton>
+            {selectedDocumentIds.length === 0 && (
+              <p className="mt-3 flex items-center gap-2 text-xs text-[var(--candidate-muted)]">
+                <Paperclip className="h-4 w-4" aria-hidden="true" />
+                Select or upload at least one document.
+              </p>
             )}
-            {documents.map((document) => (
-              <label key={document.id} className="flex items-start gap-3 rounded-lg border border-zinc-200 p-4">
-                <input
-                  type="checkbox"
-                  checked={selectedDocumentIds.includes(document.id)}
-                  onChange={() => toggleDocument(document.id)}
-                  className="mt-1 h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-300"
-                />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-zinc-950">{document.file_name}</p>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    {document.document_type} - Uploaded {new Date(document.created_at).toLocaleString()}
-                  </p>
-                </div>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={isSubmitting || isUploading || selectedDocumentIds.length === 0}
-          className="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSubmitting ? "Submitting" : "Submit application"}
-        </button>
+          </CandidateSection>
+        </aside>
       </form>
-    </div>
+    </CandidatePage>
   );
 }
