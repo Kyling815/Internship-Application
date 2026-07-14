@@ -53,6 +53,31 @@ services:
       - "5173:5173"
     depends_on:
       - backend
+  chat-service:
+    build:
+      context: ./chat-service
 
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      CHAT_CORS_ORIGIN: http://localhost:5173
+
+    ports:
+      - "${CHAT_PORT:-3000}:3000"
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    restart: unless-stopped
 volumes:
   postgres_data:

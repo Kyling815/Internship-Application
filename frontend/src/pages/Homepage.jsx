@@ -23,7 +23,7 @@ import {
   Instagram,
   Search
 } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion, useScroll, useTransform } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 
@@ -435,6 +435,9 @@ function ApplicationJourney() {
   const [active, setActive] = useState(0);
   const shouldReduceMotion = useReducedMotion();
 
+  // Map the 5 steps to progress points along the path (0% to 100%)
+  const progress = (active + 1) / milestones.length;
+
   return (
     <section className="homepage-section application-journey" aria-labelledby="journey-title">
       <Reveal className="application-journey__intro">
@@ -448,6 +451,7 @@ function ApplicationJourney() {
               type="button"
               key={milestone.label}
               className={active === index ? "is-active" : ""}
+              onClick={() => setActive(index)}
               onFocus={() => setActive(index)}
               onMouseEnter={() => setActive(index)}
               whileInView={() => setActive(index)}
@@ -461,7 +465,17 @@ function ApplicationJourney() {
           ))}
         </div>
         <Reveal className="journey-stage">
-          <svg viewBox="0 0 460 280" aria-hidden="true">
+          <svg viewBox="0 0 460 280" aria-hidden="true" style={{ overflow: "visible" }}>
+            {/* Background path (faint track) */}
+            <path
+              d="M28 210 C116 42 225 284 432 72"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              opacity={0.15}
+            />
+            {/* Active path */}
             <motion.path
               d="M28 210 C116 42 225 284 432 72"
               fill="none"
@@ -469,10 +483,22 @@ function ApplicationJourney() {
               strokeWidth="3"
               strokeLinecap="round"
               initial={shouldReduceMotion ? false : { pathLength: 0 }}
-              whileInView={shouldReduceMotion ? undefined : { pathLength: 1 }}
-              viewport={{ once: true }}
-              transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
+              animate={shouldReduceMotion ? undefined : { pathLength: progress }}
+              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
             />
+            {/* Moving dot */}
+            {!shouldReduceMotion && (
+              <motion.circle
+                r="6"
+                fill="currentColor"
+                style={{
+                  offsetPath: `path("M28 210 C116 42 225 284 432 72")`,
+                }}
+                initial={{ offsetDistance: "0%" }}
+                animate={{ offsetDistance: `${progress * 100}%` }}
+                transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              />
+            )}
           </svg>
           <div className="journey-stage__note">
             <span>{milestones[active].metric}</span>
@@ -518,6 +544,7 @@ function ProfileReadiness() {
 }
 
 function InternshipDiscovery() {
+  const shouldReduceMotion = useReducedMotion();
   return (
     <section className="homepage-section opportunity-section" id="opportunities" aria-labelledby="opportunities-title">
       <Reveal className="opportunity-section__copy">
@@ -538,20 +565,26 @@ function InternshipDiscovery() {
           <span>Career fair signal</span>
           <strong>Compare fit before you apply</strong>
         </div>
-        <div className="opportunity-rail" aria-label="Opportunity examples">
-          {opportunities.map((opportunity, index) => (
-            <motion.article
-              key={opportunity.company}
-              className={index === 1 ? "is-focused" : ""}
-              whileHover={{ y: -6 }}
-              transition={{ duration: 0.18 }}
-            >
-              <span>{opportunity.company}</span>
-              <h3>{opportunity.role}</h3>
-              <p>{opportunity.detail}</p>
-              <small>{opportunity.deadline}</small>
-            </motion.article>
-          ))}
+        <div className="opportunity-rail" aria-label="Opportunity examples" style={{ overflowX: "hidden" }}>
+          <motion.div
+            style={{ display: "flex", gap: "1rem", width: "max-content", paddingRight: "1rem" }}
+            animate={shouldReduceMotion ? undefined : { x: ["0%", "-50%"] }}
+            transition={{ duration: 25, ease: "linear", repeat: Infinity }}
+          >
+            {[...opportunities, ...opportunities].map((opportunity, index) => (
+              <motion.article
+                key={`${opportunity.company}-${index}`}
+                className={index % 3 === 1 ? "is-focused" : ""}
+                whileHover={{ y: -6 }}
+                transition={{ duration: 0.18 }}
+              >
+                <span>{opportunity.company}</span>
+                <h3>{opportunity.role}</h3>
+                <p>{opportunity.detail}</p>
+                <small>{opportunity.deadline}</small>
+              </motion.article>
+            ))}
+          </motion.div>
         </div>
       </Reveal>
     </section>
