@@ -1,48 +1,63 @@
-import Message from "../models/Message.js";
-import User from "../models/user.js";
 import cloudinary from "../lib/cloudinary.js";
+import { messagesRepo, usersRepo } from "../repositories/chatRepository.js";
 import { io, userSocketMap } from "../server.js";
 
-// Get all users except the current user
+function userDisplayName(user) {
+  return user?.displayName || user?.username || user?.email?.split("@")[0] || "chat-user";
+}
+
+function userIdentityKey(user) {
+  return String(user?.appUserId || user?.email || userDisplayName(user) || user?._id)
+    .normalize("NFC")
+    .toLowerCase();
+}
+
+function userQualityScore(user) {
+  const name = userDisplayName(user);
+  let score = 0;
+  if (user?.displayName) score += 4;
+  if (/[^\x00-\x7F]/.test(name)) score += 3;
+  if (!/-/.test(name)) score += 1;
+  if (user?.updatedAt) score += 1;
+  return score;
+}
+
+function dedupeUsers(users) {
+  const byKey = new Map();
+  users.forEach((user) => {
+    const key = userIdentityKey(user);
+    const current = byKey.get(key);
+    if (!current || userQualityScore(user) >= userQualityScore(current)) {
+      byKey.set(key, user);
+    }
+  });
+  return [...byKey.values()];
+}
+
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find({ _id: { $ne: req.user._id } }).select(
-      "username email profilePicture bio createdAt"
-    );
-    // count unread messages for each user
+    const users = dedupeUsers(await usersRepo.listExcept(req.user._id));
     const unSeenMessages = {};
-    const promises = users.map(async (user) => {
-      const message = await Message.find({ sender: user._id, receiver: req.user._id, seen: false });
-      if (message.length > 0) {
-        unSeenMessages[user._id] = message.length;
-      }
-    });
-    await Promise.all(promises);
-    res.status(200).json({ success: true, users: users, unSeenMessages });
+
+    await Promise.all(users.map(async (user) => {
+      const count = await messagesRepo.countUnreadFromSender(user._id, req.user._id);
+      if (count > 0) unSeenMessages[user._id] = count;
+    }));
+
+    res.status(200).json({ success: true, users, unSeenMessages });
   } catch (error) {
     console.error("Error fetching users:", error);
     res.status(500).json({ success: false, message: "Server error fetching users" });
   }
 };
 
-// Get user by ID
 export const getUserById = async (req, res) => {
-  const userId = req.params.id;
   try {
     const { id: selectedUserId } = req.params;
     const myId = req.user._id;
 
-    const messages = await Message.find({
-      $or: [
-        { sender: myId, receiver: selectedUserId },
-        { sender: selectedUserId, receiver: myId }
-      ]
-    }).sort({ createdAt: 1 });
-
-    await Message.updateMany(
-      { sender: selectedUserId, receiver: myId, seen: false },
-      { $set: { seen: true } }
-    );
+    const messages = await messagesRepo.listDirectBetween(myId, selectedUserId);
+    await messagesRepo.markDirectSeen(selectedUserId, myId);
 
     res.status(200).json({ success: true, messages });
   } catch (error) {
@@ -51,13 +66,9 @@ export const getUserById = async (req, res) => {
   }
 };
 
-// api to mark messages as seen by id
 export const markMessagesAsSeen = async (req, res) => {
-  const senderId = req.params.id;
   try {
-    await Message.findByIdAndUpdate(
-      id,
-      { seen: true });
+    await messagesRepo.markDirectSeen(req.params.id, req.user._id);
     res.status(200).json({ success: true, message: "Messages marked as seen" });
   } catch (error) {
     console.error("Error marking messages as seen:", error);
@@ -65,34 +76,41 @@ export const markMessagesAsSeen = async (req, res) => {
   }
 };
 
-//  send message controller
 export const sendMessage = async (req, res) => {
   try {
     const { text, image } = req.body;
     const receiverId = req.params.id;
     const senderId = req.user._id;
 
+    if (!text && !image) {
+      return res.status(400).json({ success: false, message: "Message must have text or image" });
+    }
+
     let imageUrl;
-    if(image && process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET){
+    if (image && process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
       const uploadResponse = await cloudinary.uploader.upload(image, {
-        folder: 'chat-app/messages',
+        folder: "chat-app/messages"
       });
       imageUrl = uploadResponse.secure_url;
     } else if (image) {
       imageUrl = image;
     }
-    
-    const newMessage = await Message.create({
+
+    const newMessage = await messagesRepo.create({
       sender: senderId,
       receiver: receiverId,
       text,
-      image: imageUrl,
+      image: imageUrl
     });
 
-    // Emit the new message to the receiver if they are online
-    const receiverSocketId = userSocketMap[receiverId];
+    const receiver = await usersRepo.getById(receiverId);
+    const receiverAliases = [receiverId, receiver?.appUserId, receiver?.email].filter(Boolean).map(String);
+    const receiverSocketId = receiverAliases.map((alias) => userSocketMap[alias]).find(Boolean);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("newMessage", newMessage);
+      console.log(`Direct message ${newMessage._id} emitted to ${receiverAliases.join(", ")}`);
+    } else {
+      console.log(`Direct message ${newMessage._id} stored; receiver offline aliases=${receiverAliases.join(", ")}`);
     }
 
     res.status(201).json({ success: true, message: newMessage });
@@ -101,28 +119,23 @@ export const sendMessage = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error sending message" });
   }
 };
-// Delete message controller
+
 export const deleteMessage = async (req, res) => {
   try {
     const messageId = req.params.id;
     const userId = req.user._id;
+    const message = await messagesRepo.getById(messageId);
 
-    // Find the message
-    const message = await Message.findById(messageId);
-    
     if (!message) {
       return res.status(404).json({ success: false, message: "Message not found" });
     }
 
-    // Check if the user is the sender of the message
-    if (message.sender.toString() !== userId.toString()) {
+    if (message.sender !== userId) {
       return res.status(403).json({ success: false, message: "You can only delete your own messages" });
     }
 
-    // Delete the message
-    await Message.findByIdAndDelete(messageId);
+    await messagesRepo.delete(messageId);
 
-    // Emit delete event to receiver if online
     const receiverSocketId = userSocketMap[message.receiver];
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("messageDeleted", messageId);
@@ -135,7 +148,6 @@ export const deleteMessage = async (req, res) => {
   }
 };
 
-// Edit message controller
 export const editMessage = async (req, res) => {
   try {
     const messageId = req.params.id;
@@ -143,48 +155,32 @@ export const editMessage = async (req, res) => {
     const userId = req.user._id;
 
     if (!text || !text.trim()) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Message text is required" 
+      return res.status(400).json({
+        success: false,
+        message: "Message text is required"
       });
     }
 
-    // Find the message
-    const message = await Message.findById(messageId);
-    
+    const message = await messagesRepo.getById(messageId);
+
     if (!message) {
       return res.status(404).json({ success: false, message: "Message not found" });
     }
 
-    // Check if the user is the sender of the message
-    if (message.sender.toString() !== userId.toString()) {
-      return res.status(403).json({ 
-        success: false, 
-        message: "You can only edit your own messages" 
+    if (message.sender !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only edit your own messages"
       });
     }
 
-    // Update message
-    message.text = text;
-    message.edited = true;
-    message.editedAt = new Date();
-    await message.save();
+    const responseMessage = await messagesRepo.update(messageId, {
+      text,
+      edited: true,
+      editedAt: new Date().toISOString()
+    });
 
-    // Create response with sender as ID (not populated)
-    const responseMessage = {
-      _id: message._id,
-      sender: message.sender,
-      receiver: message.receiver,
-      text: message.text,
-      image: message.image,
-      edited: message.edited,
-      editedAt: message.editedAt,
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt
-    };
-
-    // Emit edit event to receiver if online
-    const receiverSocketId = userSocketMap[message.receiver.toString()];
+    const receiverSocketId = userSocketMap[message.receiver];
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("messageEdited", responseMessage);
     }

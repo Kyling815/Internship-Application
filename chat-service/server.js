@@ -3,6 +3,7 @@ import "./lib/env.js";
 import cors from "cors";
 import http from "http";
 import { connectDB } from "./lib/db.js";
+import { closeRedisAdapter, connectRedisAdapter } from "./lib/redis.js";
 
 import userRouter from "./routes/userRoutes.js";
 import messageRouter from "./routes/messageRoutes.js";
@@ -30,16 +31,30 @@ export const io = new Server(server, {
   },
 }); 
 
-// store online users
-export const userSocketMap = {}; // {userId: socketId}
+// Store online users by every stable alias we know about:
+// chat DynamoDB _id, upstream app user id, and email.
+export const userSocketMap = {}; // {userAlias: socketId}
+const socketAliasMap = new Map(); // {socketId: string[]}
+
+function getSocketAliases(socket) {
+  const { userId, chatUserId, appUserId, email } = socket.handshake.query || {};
+  return [...new Set([userId, chatUserId, appUserId, email]
+    .flat()
+    .filter(Boolean)
+    .map((value) => String(value)))];
+}
 
 // socket.io connection handler
 io.on("connection", (socket) => {
-  const userId = socket.handshake.query.userId;
+  const aliases = getSocketAliases(socket);
+  const userId = aliases[0];
 
-  console.log(`User connected: ${userId}, Socket ID: ${socket.id}`);
-  if(userId){
-    userSocketMap[userId] = socket.id;
+  console.log(`User connected: ${aliases.join(", ") || "anonymous"}, Socket ID: ${socket.id}`);
+  if(aliases.length){
+    socketAliasMap.set(socket.id, aliases);
+    aliases.forEach((alias) => {
+      userSocketMap[alias] = socket.id;
+    });
   }
   // Emit event to all connected clients
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
@@ -48,10 +63,14 @@ io.on("connection", (socket) => {
   setupTerminal(socket);
 
   socket.on("disconnect", () => {
-    console.log(`User disconnected: ${userId}, Socket ID: ${socket.id}`);
-    if(userId && userSocketMap[userId]){
-      delete userSocketMap[userId];
-    }
+    const registeredAliases = socketAliasMap.get(socket.id) || aliases;
+    console.log(`User disconnected: ${registeredAliases.join(", ") || "anonymous"}, Socket ID: ${socket.id}`);
+    registeredAliases.forEach((alias) => {
+      if(userSocketMap[alias] === socket.id){
+        delete userSocketMap[alias];
+      }
+    });
+    socketAliasMap.delete(socket.id);
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });
 });
@@ -77,6 +96,7 @@ const PORT = process.env.PORT || 5000;
 async function startServer() {
   try {
     await connectDB();
+    await connectRedisAdapter(io);
     server.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });
@@ -86,3 +106,11 @@ async function startServer() {
 }
 
 startServer();
+
+async function shutdown() {
+  await closeRedisAdapter();
+  server.close(() => process.exit(0));
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

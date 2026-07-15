@@ -1,7 +1,6 @@
-import jwt from 'jsonwebtoken';
-import mongoose from 'mongoose';
-import User from '../models/user.js';
-import '../lib/env.js';
+import jwt from "jsonwebtoken";
+import "../lib/env.js";
+import { safeUser, usersRepo } from "../repositories/chatRepository.js";
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || process.env.SECRET_KEY;
@@ -12,14 +11,33 @@ function getHeaderValue(req, name) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function normalizeUsername(value, fallback) {
+function getDecodedHeaderValue(req, name) {
+  const value = getHeaderValue(req, name);
+  if (!value) return value;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeDisplayName(value, fallback) {
   const base = String(value || fallback || "chat-user")
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 48);
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 64);
   return base || "chat-user";
+}
+
+function isGeneratedChatName(value) {
+  return /^chat-user(?:[-\w]*)?$/i.test(String(value || ""));
+}
+
+function isSluggedDisplayName(value, displayName) {
+  const current = String(value || "");
+  const next = String(displayName || "");
+  return /-/.test(current) && /\p{L}/u.test(next) && current !== next;
 }
 
 function avatarFor(seed) {
@@ -29,72 +47,63 @@ function avatarFor(seed) {
 async function resolveAuthenticatedUser(req, decoded) {
   const decodedUserId = decoded.id || decoded.sub;
 
-  if (decodedUserId && mongoose.Types.ObjectId.isValid(decodedUserId)) {
-    const chatUser = await User.findById(decodedUserId).select('-password');
-    if (chatUser) return chatUser;
+  if (decodedUserId) {
+    const chatUser = await usersRepo.getById(decodedUserId);
+    if (chatUser) return safeUser(chatUser);
   }
 
   const appUserId = decoded.sub ? `fastapi:${decoded.sub}` : null;
-  const email = decoded.email || getHeaderValue(req, 'x-user-email');
-  const displayName = decoded.name || getHeaderValue(req, 'x-user-name') || email?.split('@')[0];
-  const profilePicture = getHeaderValue(req, 'x-user-avatar') || avatarFor(displayName || email);
+  const email = decoded.email || getHeaderValue(req, "x-user-email");
+  const displayName = decoded.name || getDecodedHeaderValue(req, "x-user-name") || email?.split("@")[0];
+  const profilePicture = getHeaderValue(req, "x-user-avatar") || avatarFor(displayName || email);
 
   if (!appUserId && !email) return null;
 
-  const query = [];
-  if (appUserId) query.push({ appUserId });
-  if (email) query.push({ email });
-
-  let user = query.length ? await User.findOne({ $or: query }) : null;
+  let user = await usersRepo.findByAppUserIdOrEmail(appUserId, email);
   if (!user) {
-    const usernameBase = normalizeUsername(displayName, email?.split('@')[0]);
-    const existingUsername = await User.exists({ username: usernameBase });
+    const usernameBase = normalizeDisplayName(displayName, email?.split("@")[0]);
+    const existingUsername = await usersRepo.existsByUsername(usernameBase);
 
-    user = await User.create({
+    user = await usersRepo.create({
       ...(appUserId ? { appUserId } : {}),
       username: existingUsername ? `${usernameBase}-${decoded.sub || Date.now()}`.slice(0, 64) : usernameBase,
+      displayName: usernameBase,
       email: email || `${decoded.sub}@local.chat`,
       password: `external-auth-${decoded.sub || Date.now()}`,
       profilePicture,
-      bio: "Synced from Internship Tracker",
+      bio: "Synced from Internship Tracker"
     });
   } else {
-    let changed = false;
-    if (appUserId && !user.appUserId) {
-      user.appUserId = appUserId;
-      changed = true;
+    const patch = {};
+    if (appUserId && !user.appUserId) patch.appUserId = appUserId;
+    if (email && user.email !== email) patch.email = email;
+    const nextUsername = normalizeDisplayName(displayName, email?.split("@")[0]);
+    if (displayName && (isGeneratedChatName(user.username) || isSluggedDisplayName(user.username, nextUsername))) {
+      patch.username = nextUsername;
     }
-    if (email && user.email !== email) {
-      user.email = email;
-      changed = true;
-    }
-    if (displayName && user.username?.startsWith("chat-user")) {
-      user.username = normalizeUsername(displayName, email?.split('@')[0]);
-      changed = true;
-    }
-    if (changed) await user.save();
+    if (displayName && user.displayName !== nextUsername) patch.displayName = nextUsername;
+    if (Object.keys(patch).length) user = await usersRepo.update(user._id, patch);
   }
 
-  return User.findById(user._id).select('-password');
+  return safeUser(user);
 }
 
 export const ProtectedRoute = async (req, res, next) => {
   try {
-    // Support both `Authorization: Bearer <token>` and `token` header
     const authHeader = req.headers.authorization || req.headers.token;
 
     if (!authHeader) {
-      return res.status(401).json({ success: false, message: 'No token provided' });
+      return res.status(401).json({ success: false, message: "No token provided" });
     }
 
-    const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+    const token = authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : authHeader;
 
     let decoded;
     try {
       decoded = jwt.verify(token, getJwtSecret());
     } catch (err) {
-      console.error('JWT verify error:', err.message);
-      return res.status(401).json({ success: false, message: 'Token is not valid' });
+      console.error("JWT verify error:", err.message);
+      return res.status(401).json({ success: false, message: "Token is not valid" });
     }
 
     const user = await resolveAuthenticatedUser(req, decoded);
@@ -102,15 +111,14 @@ export const ProtectedRoute = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'User not found'
+        message: "User not found"
       });
     }
 
     req.user = user;
     next();
   } catch (error) {
-    console.error('Error in ProtectedRoute middleware:', error);
-    res.status(401).json({ message: 'Token is not valid' });
+    console.error("Error in ProtectedRoute middleware:", error);
+    res.status(401).json({ message: "Token is not valid" });
   }
 };
-

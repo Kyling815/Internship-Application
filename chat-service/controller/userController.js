@@ -1,15 +1,26 @@
-import '../lib/env.js';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import User from '../models/user.js';
-import cloudinary from '../lib/cloudinary.js';
-import { io, userSocketMap } from '../server.js';
+import "../lib/env.js";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import cloudinary from "../lib/cloudinary.js";
+import { safeUser, usersRepo } from "../repositories/chatRepository.js";
+import { io, userSocketMap } from "../server.js";
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || process.env.SECRET_KEY;
 }
 
-// Signup user
+function publicUserData(user) {
+  return {
+    _id: user._id,
+    id: user._id,
+    username: user.username,
+    email: user.email,
+    profilePicture: user.profilePicture,
+    bio: user.bio,
+    createdAt: user.createdAt
+  };
+}
+
 export const signup = async (req, res) => {
   const { username, email, password, profilePicture, bio } = req.body;
 
@@ -18,7 +29,6 @@ export const signup = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Additional validation can be added here (e.g., email format, password strength)
     if (password.length < 6) {
       return res.status(400).json({ message: "Password must be at least 6 characters long" });
     }
@@ -33,38 +43,26 @@ export const signup = async (req, res) => {
       return res.status(400).json({ message: "Bio cannot exceed 150 characters" });
     }
 
-    // If validation passes, proceed to create the user (this part is not implemented here)
-    const existintUser = await User.findOne({ $or: [{ email }, { username }] });
-    if (existintUser) {
+    const existingUser = await usersRepo.findByEmailOrUsername(email, username);
+    if (existingUser) {
       return res.status(409).json({ message: "Username or email already in use" });
     }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const newUser = new User({
+    const newUser = await usersRepo.create({
       username,
       email,
       password: hashedPassword,
       profilePicture,
-      bio: bio || "",
+      bio: bio || ""
     });
 
     const token = jwt.sign({ id: newUser._id, username: newUser.username, email: newUser.email }, getJwtSecret());
+    const newUserData = publicUserData(newUser);
 
-    await newUser.save();
-
-    // Emit to all connected users that a new user registered
-    const newUserData = {
-      _id: newUser._id,
-      username: newUser.username,
-      email: newUser.email,
-      profilePicture: newUser.profilePicture,
-      bio: newUser.bio,
-      createdAt: newUser.createdAt,
-    };
-    
-    Object.values(userSocketMap).forEach(socketId => {
+    Object.values(userSocketMap).forEach((socketId) => {
       io.to(socketId).emit("newUser", newUserData);
     });
 
@@ -72,8 +70,8 @@ export const signup = async (req, res) => {
       success: true,
       userData: newUserData,
       token,
-      message: "User registered successfully",
-    })
+      message: "User registered successfully"
+    });
   } catch (error) {
     console.error("Error during user signup:", error);
     res.status(500).json({
@@ -83,14 +81,13 @@ export const signup = async (req, res) => {
   }
 };
 
-// Login user
 export const login = async (req, res) => {
   const { email, password } = req.body;
   try {
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required" });
     }
-    const user = await User.findOne({ email });
+    const user = await usersRepo.findByEmail(email);
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
@@ -101,16 +98,9 @@ export const login = async (req, res) => {
     const token = jwt.sign({ id: user._id, username: user.username, email: user.email }, getJwtSecret());
     res.status(200).json({
       success: true,
-      userData: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        profilePicture: user.profilePicture,
-        bio: user.bio,
-        createdAt: user.createdAt,
-      },
+      userData: publicUserData(user),
       token,
-      message: "Login successful",
+      message: "Login successful"
     });
   } catch (error) {
     console.error("Error during user login:", error);
@@ -121,35 +111,30 @@ export const login = async (req, res) => {
   }
 };
 
-// controller to check if user is authenticated
 export const checkAuth = (req, res) => {
   res.status(200).json({
     success: true,
     userData: req.user,
-    message: 'User is authenticated'
+    message: "User is authenticated"
   });
-}
+};
 
-// Delete user account
 export const deleteUser = async (req, res) => {
   try {
     const userId = req.user._id;
     const { userId: targetUserId } = req.params;
 
-    // Users can only delete their own account
-    if (userId.toString() !== targetUserId) {
+    if (userId !== targetUserId) {
       return res.status(403).json({
         success: false,
         message: "You can only delete your own account"
       });
     }
 
-    // Delete the user
-    await User.findByIdAndDelete(userId);
+    await usersRepo.delete(userId);
 
-    // Emit to all connected users that a user was deleted
-    Object.values(userSocketMap).forEach(socketId => {
-      io.to(socketId).emit("userDeleted", { userId: userId.toString() });
+    Object.values(userSocketMap).forEach((socketId) => {
+      io.to(socketId).emit("userDeleted", { userId });
     });
 
     res.status(200).json({
@@ -165,31 +150,29 @@ export const deleteUser = async (req, res) => {
   }
 };
 
-// controller to update user profile
 export const updateProfile = async (req, res) => {
-  try{
+  try {
     const { username, bio, profilePicture } = req.body;
     const userId = req.user._id;
-    let updatedData = {};
+    const patch = { username, bio };
 
-    if(!profilePicture){
-      updatedData = await User.findByIdAndUpdate(userId, { username, bio }, { new: true });
-    }else{
-      // Upload new profile picture to Cloudinary
-      const uploadResult = await cloudinary.uploader.upload(profilePicture);
-      updatedData = await User.findByIdAndUpdate(userId, {
-        username,
-        bio,
-        profilePicture: uploadResult.secure_url
-      }, { new: true });
+    if (profilePicture) {
+      if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+        const uploadResult = await cloudinary.uploader.upload(profilePicture);
+        patch.profilePicture = uploadResult.secure_url;
+      } else {
+        patch.profilePicture = profilePicture;
+      }
     }
-    
+
+    const updatedData = await usersRepo.update(userId, patch);
+
     res.status(200).json({
       success: true,
-      userData: updatedData,
+      userData: safeUser(updatedData),
       message: "Profile updated successfully"
     });
-  }catch(error){
+  } catch (error) {
     console.error("Error updating user profile:", error);
     res.status(500).json({
       success: false,

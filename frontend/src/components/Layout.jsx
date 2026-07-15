@@ -56,6 +56,7 @@ export function Layout() {
   const navItems = user?.role === "hr" ? hrNavItems : candidateNavItems;
   const appLabel = user?.role === "hr" ? "Internship Platform HR" : "Internship Tracker";
   const isCandidateWorkspace = user?.role !== "hr";
+  const isChatRoute = location.pathname === "/chat";
 
   useEffect(() => {
     setIsMobileNavOpen(false);
@@ -107,15 +108,17 @@ export function Layout() {
         logout={logout}
       />
 
-      <div className="app-content lg:has-collapsed-sidebar:pl-[5.5rem] lg:has-expanded-sidebar:pl-72">
-        <main className="mx-auto w-full max-w-7xl overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
-          <div key={location.pathname} className="route-panel">
+      <div className={`app-content ${isChatRoute ? "app-content--flush" : "lg:has-collapsed-sidebar:pl-[5.5rem] lg:has-expanded-sidebar:pl-72"}`}>
+        <main className={isChatRoute ? "h-[calc(100dvh-3.5rem)] w-full overflow-hidden p-0 lg:h-dvh" : "mx-auto w-full max-w-7xl overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-7"}>
+          <div key={location.pathname} className={isChatRoute ? "route-panel h-full min-h-0" : "route-panel"}>
             <Outlet />
           </div>
         </main>
-        <div className="mx-auto w-full max-w-7xl px-4 pb-6 sm:px-6 lg:px-8">
-          <AppFooter tone={isCandidateWorkspace ? "candidate" : "app"} />
-        </div>
+        {!isChatRoute && (
+          <div className="mx-auto w-full max-w-7xl px-4 pb-6 sm:px-6 lg:px-8">
+            <AppFooter tone={isCandidateWorkspace ? "candidate" : "app"} />
+          </div>
+        )}
       </div>
     </div>
   );
