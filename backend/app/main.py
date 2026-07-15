@@ -3,21 +3,21 @@ from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.logging_config import setup_logging
-from app.db.database import Base, engine
+from app.db.database import Base, engine, get_db
 from app.db import models
 from app.routers import ai, applications, auth, dashboard, documents
 from app.routers import candidate, companies, hr, jobs
 
 from time import perf_counter
 
-from fastapi import Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.core.metrics import (
@@ -134,6 +134,25 @@ def create_tables_for_local_mvp() -> None:
 def health_check():
     return {"status": "ok"}
 
+@app.get("/health/live", include_in_schema=False)
+def liveness():
+    return {
+        "status": "alive",
+        "service": "internship-api",
+    }
+
+
+@app.get("/health/ready", include_in_schema=False)
+def readiness(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
+
+    return {
+        "status": "ready",
+        "service": "internship-api",
+        "dependencies": {
+            "postgres": True,
+        },
+    }
 
 app.include_router(auth.router)
 app.include_router(applications.router)

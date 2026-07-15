@@ -3,7 +3,7 @@ import "./lib/env.js";
 import cors from "cors";
 import http from "http";
 import { connectDB } from "./lib/db.js";
-import { closeRedisAdapter, connectRedisAdapter } from "./lib/redis.js";
+import { closeRedisAdapter, connectRedisAdapter, getRedisStatus } from "./lib/redis.js";
 import {
   groupsRepo,
   messagesRepo,
@@ -31,6 +31,9 @@ import { Server } from "socket.io";
 const app = express();
 const server = http.createServer(app);
 const chatCorsOrigin = process.env.CHAT_CORS_ORIGIN || "http://localhost:5173";
+const dependencyState = {
+  dynamodb: false,
+};
 
 app.get("/health", (_req, res) => {
   res.status(200).json({
@@ -304,13 +307,41 @@ app.use("/api/auth", userRouter);
 app.use("/api/users", userRouter);
 app.use("/api/messages", messageRouter);
 app.use("/api/groups", groupRouter);
+app.get("/health/live", (_req, res) => {
+  res.status(200).json({
+    status: "alive",
+    service: "chat-service",
+  });
+});
 
+app.get("/health/ready", (_req, res) => {
+  const redisStatus = getRedisStatus();
+
+  const ready =
+    redisStatus.publisherReady &&
+    redisStatus.subscriberReady &&
+    dependencyState.dynamodb;
+
+  res.status(ready ? 200 : 503).json({
+    status: ready ? "ready" : "not_ready",
+
+    dependencies: {
+      redis:
+        redisStatus.publisherReady &&
+        redisStatus.subscriberReady,
+
+      dynamodb:
+        dependencyState.dynamodb,
+    },
+  });
+});
 
 const PORT = process.env.PORT || 5000;
 
 async function startServer() {
   try {
     await connectDB();
+    dependencyState.dynamodb = true;
     dependencyUp
       .labels("dynamodb")
       .set(1);

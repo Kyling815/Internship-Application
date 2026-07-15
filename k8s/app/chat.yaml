@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-service
+  namespace: internship
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: chat-service
+
+  template:
+    metadata:
+      labels:
+        app: chat-service
+
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: chat-service
+          image: internship-chat:local
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 3000
+
+          env:
+            - name: NODE_ENV
+              value: local-kubernetes
+
+            - name: PORT
+              value: "3000"
+
+          envFrom:
+            - configMapRef:
+                name: internship-config
+
+            - secretRef:
+                name: internship-secrets
+
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 160Mi
+            limits:
+              cpu: 750m
+              memory: 640Mi
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-service
+  namespace: internship
+
+  labels:
+    app: chat-service
+
+spec:
+  selector:
+    app: chat-service
+
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

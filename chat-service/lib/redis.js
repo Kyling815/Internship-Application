@@ -53,3 +53,10 @@ export async function closeRedisAdapter() {
     pubClient?.destroy?.()
   ]);
 }
+
+export function getRedisStatus() {
+  return {
+    publisherReady: Boolean(pubClient?.isReady),
+    subscriberReady: Boolean(subClient?.isReady),
+  };
+}
