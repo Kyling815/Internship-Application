@@ -232,7 +232,7 @@ export const getGroupMessages = async (req, res) => {
     }
 
     const messages = await Message.find({ group: groupId })
-      .populate('sender', 'username profilePicture')
+      .populate('sender', 'username email profilePicture appUserId')
       .sort({ createdAt: 1 });
 
     // Mark messages as seen by current user
@@ -294,7 +294,7 @@ export const sendGroupMessage = async (req, res) => {
     });
 
     await newMessage.save();
-    await newMessage.populate('sender', 'username profilePicture');
+    await newMessage.populate('sender', 'username email profilePicture appUserId');
 
     // Update group's last message
     group.lastMessage = newMessage._id;
@@ -550,7 +550,7 @@ export const editGroupMessage = async (req, res) => {
     message.edited = true;
     message.editedAt = new Date();
     await message.save();
-    await message.populate('sender', 'username profilePicture');
+    await message.populate('sender', 'username email profilePicture appUserId');
 
     // Get group for socket emission
     const group = await Group.findById(message.group);

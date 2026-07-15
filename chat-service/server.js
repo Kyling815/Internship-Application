@@ -1,5 +1,5 @@
 import express from "express";
-import "dotenv/config";
+import "./lib/env.js";
 import cors from "cors";
 import http from "http";
 import { connectDB } from "./lib/db.js";
@@ -12,6 +12,7 @@ import { setupTerminal } from "./controller/terminalController.js";
 import { Server } from "socket.io";
 const app = express();
 const server = http.createServer(app);
+const chatCorsOrigin = process.env.CHAT_CORS_ORIGIN || "http://localhost:5173";
 
 app.get("/health", (_req, res) => {
   res.status(200).json({
@@ -24,7 +25,7 @@ app.get("/health", (_req, res) => {
 // Socket.io setup
 export const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: chatCorsOrigin,
     // methods: ["GET", "POST"],
   },
 }); 
@@ -60,7 +61,7 @@ app.use(express.json(
     limit: '4mb'
   }
 ));
-app.use(cors());
+app.use(cors({ origin: chatCorsOrigin }));
 
 app.use("/api/status", (req, res) => {
   res.json({ status: "Server is running" });
@@ -72,7 +73,16 @@ app.use("/api/groups", groupRouter);
 
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  connectDB();
-});
+
+async function startServer() {
+  try {
+    await connectDB();
+    server.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  } catch {
+    process.exit(1);
+  }
+}
+
+startServer();

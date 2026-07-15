@@ -1,10 +1,13 @@
-import dotenv from 'dotenv';
+import '../lib/env.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/user.js';
 import cloudinary from '../lib/cloudinary.js';
 import { io, userSocketMap } from '../server.js';
-dotenv.config();
+
+function getJwtSecret() {
+  return process.env.JWT_SECRET || process.env.SECRET_KEY;
+}
 
 // Signup user
 export const signup = async (req, res) => {
@@ -47,7 +50,7 @@ export const signup = async (req, res) => {
       bio: bio || "",
     });
 
-    const token = jwt.sign({ id: newUser._id, username: newUser.username, email: newUser.email }, process.env.JWT_SECRET);
+    const token = jwt.sign({ id: newUser._id, username: newUser.username, email: newUser.email }, getJwtSecret());
 
     await newUser.save();
 
@@ -95,7 +98,7 @@ export const login = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
-    const token = jwt.sign({ id: user._id, username: user.username, email: user.email }, process.env.JWT_SECRET);
+    const token = jwt.sign({ id: user._id, username: user.username, email: user.email }, getJwtSecret());
     res.status(200).json({
       success: true,
       userData: {
