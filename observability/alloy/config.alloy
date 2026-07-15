@@ -1,0 +1,74 @@
+discovery.docker "local_containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+discovery.relabel "application_logs" {
+  targets = discovery.docker.local_containers.targets
+
+  // Chỉ giữ các container thuộc hệ thống ứng dụng.
+  // Không thu log của Grafana, Loki và Alloy để tránh nhiễu.
+  rule {
+    source_labels = [
+      "__meta_docker_container_label_com_docker_compose_service",
+    ]
+
+    regex  = "backend|chat-service|frontend|db|redis|dynamodb-local|chat-init"
+    action = "keep"
+  }
+
+  // Tạo label service từ tên Docker Compose service.
+  rule {
+    source_labels = [
+      "__meta_docker_container_label_com_docker_compose_service",
+    ]
+
+    target_label = "service"
+  }
+
+  // Tạo label project.
+  rule {
+    source_labels = [
+      "__meta_docker_container_label_com_docker_compose_project",
+    ]
+
+    target_label = "compose_project"
+  }
+
+  // Làm sạch tên container, bỏ dấu / ở đầu.
+  rule {
+    source_labels = [
+      "__meta_docker_container_name",
+    ]
+
+    regex       = "/(.*)"
+    target_label = "container"
+    replacement  = "$1"
+  }
+
+  rule {
+    target_label = "environment"
+    replacement  = "local"
+  }
+
+  rule {
+    target_label = "platform"
+    replacement  = "internship-platform"
+  }
+}
+
+loki.source.docker "application_logs" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.relabel.application_logs.output
+  refresh_interval = "5s"
+
+  forward_to = [
+    loki.write.local.receiver,
+  ]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

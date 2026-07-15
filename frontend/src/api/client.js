@@ -2,6 +2,7 @@ import axios from "axios";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8001";
 export const TOKEN_KEY = "internship_tracker_token";
+export const STORAGE_KEY_PREFIX = "internship_tracker_";
 export const AUTH_EXPIRED_EVENT = "internship_tracker_auth_expired";
 
 export const api = axios.create({
@@ -20,12 +21,33 @@ export function clearStoredToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+function clearPrefixedStorage(storage) {
+  const keys = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (key?.startsWith(STORAGE_KEY_PREFIX)) {
+      keys.push(key);
+    }
+  }
+  keys.forEach((key) => storage.removeItem(key));
+}
+
+export function clearLocalSession() {
+  clearPrefixedStorage(localStorage);
+  clearPrefixedStorage(sessionStorage);
+}
+
 export function resolveApiUrl(value) {
   if (!value) return value;
   if (value.startsWith("http://") || value.startsWith("https://")) {
     return value;
   }
   return `${API_BASE_URL}${value.startsWith("/") ? "" : "/"}${value}`;
+}
+
+function isAuthEndpoint(url) {
+  if (!url) return false;
+  return url.includes("/auth/login") || url.includes("/auth/register");
 }
 
 api.interceptors.request.use((config) => {
@@ -44,8 +66,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error?.response?.status === 401 && getStoredToken()) {
-      clearStoredToken();
+    if (
+      error?.response?.status === 401 &&
+      getStoredToken() &&
+      !isAuthEndpoint(error.config?.url)
+    ) {
+      clearLocalSession();
       window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
     }
     return Promise.reject(error);
@@ -56,6 +82,9 @@ export function getErrorMessage(error) {
   const detail = error?.response?.data?.detail;
 
   if (error?.response?.status === 401) {
+    if (isAuthEndpoint(error.config?.url)) {
+      return typeof detail === "string" ? detail : "Incorrect email or password.";
+    }
     return "Your session expired. Please sign in again.";
   }
   if (error?.response?.status === 403) {

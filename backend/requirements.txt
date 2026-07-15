@@ -13,3 +13,4 @@ boto3==1.35.90
 scikit-learn==1.6.0
 pytest==8.3.4
 httpx==0.28.1
+prometheus-client==0.25.0
