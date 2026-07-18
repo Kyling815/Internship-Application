@@ -1,0 +1,83 @@
+name: Deploy EKS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - backend/**
+      - chat-service/**
+      - k8s/**
+      - scripts/k8s/**
+      - .github/workflows/deploy-eks.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Build Images And Roll Out
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
+      EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+      ECR_REPOSITORY_BACKEND: ${{ vars.ECR_REPOSITORY_BACKEND || 'internship-api' }}
+      ECR_REPOSITORY_CHAT: ${{ vars.ECR_REPOSITORY_CHAT || 'internship-chat' }}
+      FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN || 'https://app.example.com' }}
+      API_HOST: ${{ vars.API_HOST || 'api.example.com' }}
+      CHAT_HOST: ${{ vars.CHAT_HOST || 'realtime.example.com' }}
+      API_HEALTH_URL: ${{ vars.API_HEALTH_URL }}
+      CHAT_HEALTH_URL: ${{ vars.CHAT_HEALTH_URL }}
+      DYNAMODB_USERS_TABLE: ${{ vars.DYNAMODB_USERS_TABLE || 'ChatUsers' }}
+      DYNAMODB_GROUPS_TABLE: ${{ vars.DYNAMODB_GROUPS_TABLE || 'ChatGroups' }}
+      DYNAMODB_MESSAGES_TABLE: ${{ vars.DYNAMODB_MESSAGES_TABLE || 'ChatMessages' }}
+      IRSA_ROLE_ARN: ${{ vars.IRSA_ROLE_ARN }}
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      REDIS_URL: ${{ secrets.REDIS_URL }}
+      S3_BUCKET: ${{ secrets.S3_BUCKET }}
+      S3_PUBLIC_BASE_URL: ${{ vars.S3_PUBLIC_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          BACKEND_IMAGE="${REGISTRY}/${ECR_REPOSITORY_BACKEND}:${GITHUB_SHA}"
+          docker build -t "${BACKEND_IMAGE}" ./backend
+          docker push "${BACKEND_IMAGE}"
+          echo "BACKEND_IMAGE=${BACKEND_IMAGE}" >> "${GITHUB_ENV}"
+
+      - name: Build and push chat image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          CHAT_IMAGE="${REGISTRY}/${ECR_REPOSITORY_CHAT}:${GITHUB_SHA}"
+          docker build -t "${CHAT_IMAGE}" ./chat-service
+          docker push "${CHAT_IMAGE}"
+          echo "CHAT_IMAGE=${CHAT_IMAGE}" >> "${GITHUB_ENV}"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name "${EKS_CLUSTER_NAME}" --region "${AWS_REGION}"
+
+      - name: Deploy to EKS
+        run: bash scripts/k8s/deploy-eks.sh
+
