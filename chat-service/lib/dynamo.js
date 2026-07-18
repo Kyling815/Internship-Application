@@ -21,18 +21,33 @@ export const CHAT_TABLES = {
   messages: process.env.DYNAMODB_MESSAGES_TABLE || "ChatMessages"
 };
 
-const endpoint = process.env.DYNAMODB_ENDPOINT || "http://localhost:8000";
+const endpoint = process.env.DYNAMODB_ENDPOINT || "";
 const region = process.env.AWS_REGION || process.env.DYNAMODB_REGION || "us-east-1";
-const localCredentials = {
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID || "local",
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "local"
+const hasStaticCredentials =
+  Boolean(process.env.AWS_ACCESS_KEY_ID) &&
+  Boolean(process.env.AWS_SECRET_ACCESS_KEY);
+
+const clientConfig = {
+  region,
 };
 
-export const dynamoClient = new DynamoDBClient({
-  region,
-  endpoint,
-  credentials: localCredentials
-});
+if (endpoint) {
+  clientConfig.endpoint = endpoint;
+}
+
+if (hasStaticCredentials) {
+  clientConfig.credentials = {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  };
+} else if (endpoint) {
+  clientConfig.credentials = {
+    accessKeyId: "local",
+    secretAccessKey: "local",
+  };
+}
+
+export const dynamoClient = new DynamoDBClient(clientConfig);
 
 export const dynamo = DynamoDBDocumentClient.from(dynamoClient, {
   marshallOptions: {
@@ -88,7 +103,7 @@ async function waitForActiveTable(TableName) {
 export async function ensureDynamoDB() {
   await Promise.all(Object.values(CHAT_TABLES).map((tableName) => ensureTable(tableName)));
   const result = await dynamoClient.send(new ListTablesCommand({}));
-  console.log(`DynamoDB connected at ${endpoint}`);
+  console.log(`DynamoDB connected at ${endpoint || `AWS region ${region}`}`);
   console.log(`DynamoDB chat tables ready: ${Object.values(CHAT_TABLES).join(", ")}`);
   return result.TableNames || [];
 }

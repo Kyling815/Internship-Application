@@ -1,3 +1,4 @@
+import { shutdownTracing } from "./src/tracing.js";
 import express from "express";
 import "./lib/env.js";
 import cors from "cors";
@@ -372,6 +373,7 @@ startServer();
 
 async function shutdown() {
   await closeRedisAdapter();
+  await shutdownTracing();
   server.close(() => process.exit(0));
 }
 

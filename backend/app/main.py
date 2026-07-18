@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.logging_config import setup_logging
+from app.core.tracing import configure_tracing
 from app.db.database import Base, engine, get_db
 from app.db import models
 from app.routers import ai, applications, auth, dashboard, documents
@@ -33,6 +34,7 @@ if settings.STORAGE_BACKEND.lower() == "local":
     Path(settings.LOCAL_UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title=settings.PROJECT_NAME, debug=settings.APP_DEBUG)
+configure_tracing(app)
 
 
 @app.middleware("http")

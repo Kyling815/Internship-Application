@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "nodemon server.js",
     "server": "nodemon server.js",
-    "check": "node --check server.js",
+    "check": "node --check server.js && node --check src/tracing.js && node --check scripts/init-db.js",
+    "init:db": "node scripts/init-db.js",
     "local:redis": "docker run --rm -p 6379:6379 redis:7-alpine",
     "local:dynamodb": "docker run --rm -p 8000:8000 amazon/dynamodb-local -jar DynamoDBLocal.jar -sharedDb -inMemory",
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -19,6 +20,10 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1087.0",
     "@aws-sdk/lib-dynamodb": "^3.1087.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.78.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.220.0",
+    "@opentelemetry/resources": "^2.9.0",
+    "@opentelemetry/sdk-node": "^0.220.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.8.0",
