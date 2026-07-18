@@ -13,6 +13,7 @@ spec:
         app: backend-migrate
 
     spec:
+      serviceAccountName: internship-app
       restartPolicy: Never
 
       containers:

@@ -3,27 +3,21 @@ kind: ConfigMap
 metadata:
   name: internship-config
   namespace: internship
-
 data:
-  APP_ENV: local-kubernetes
+  APP_ENV: eks
   LOG_LEVEL: INFO
   SERVICE_NAME: internship-api
 
-  BACKEND_CORS_ORIGINS: >-
-    http://localhost:5173,
-    http://127.0.0.1:5173
+  BACKEND_CORS_ORIGINS: https://app.example.com
 
-  CHAT_CORS_ORIGIN: http://localhost:5173
+  CHAT_CORS_ORIGIN: https://app.example.com
   CHAT_LOG_LEVEL: info
   CHAT_MAX_MESSAGE_LENGTH: "4000"
   REDIS_ADAPTER_REQUIRED: "true"
 
   JWT_ALGORITHM: HS256
 
-  REDIS_URL: redis://redis:6379
-
   AWS_REGION: ap-southeast-1
-  DYNAMODB_ENDPOINT: http://dynamodb-local:8000
   DYNAMODB_USERS_TABLE: ChatUsers
   DYNAMODB_GROUPS_TABLE: ChatGroups
   DYNAMODB_MESSAGES_TABLE: ChatMessages
@@ -31,4 +25,5 @@ data:
 
   OTEL_SDK_DISABLED: "false"
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.monitoring.svc.cluster.local:4317
-  OTEL_SERVICE_VERSION: local
+  OTEL_SERVICE_VERSION: eks
+

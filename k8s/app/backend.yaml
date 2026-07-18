@@ -3,9 +3,13 @@ kind: Deployment
 metadata:
   name: backend
   namespace: internship
+  labels:
+    app: backend
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: internship-platform
 
 spec:
-  replicas: 1
+  replicas: 2
 
   selector:
     matchLabels:
@@ -15,8 +19,11 @@ spec:
     metadata:
       labels:
         app: backend
+        app.kubernetes.io/name: backend
+        app.kubernetes.io/part-of: internship-platform
 
     spec:
+      serviceAccountName: internship-app
       terminationGracePeriodSeconds: 30
 
       containers:
@@ -44,28 +51,33 @@ spec:
             - secretRef:
                 name: internship-secrets
 
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: internship-api
+
           startupProbe:
             httpGet:
               path: /health/live
               port: http
-            failureThreshold: 30
+            failureThreshold: 45
             periodSeconds: 2
+            timeoutSeconds: 3
 
           readinessProbe:
             httpGet:
               path: /health/ready
               port: http
             periodSeconds: 5
-            timeoutSeconds: 3
+            timeoutSeconds: 5
             failureThreshold: 3
 
           livenessProbe:
             httpGet:
               path: /health/live
               port: http
-            periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 3
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
 
           resources:
             requests:
@@ -89,6 +101,8 @@ metadata:
 
   labels:
     app: backend
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: internship-platform
 
 spec:
   selector:
