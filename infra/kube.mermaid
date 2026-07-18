@@ -2,13 +2,14 @@ flowchart TB
     Browser[React UI<br/>Browser]
 
     subgraph K8s["kind Kubernetes Cluster"]
-        Ingress[Ingress Controller]
+        Ingress[ingress-nginx<br/>local 8080/8443]
 
         subgraph AppNS["Namespace: internship"]
             BackendSvc[Service backend]
             BackendPods[FastAPI Deployment]
             ChatSvc[Service chat-service]
             ChatPods[Socket.IO Deployment]
+            HPA[HPA + PDB]
 
             MigrateJob[Alembic Migration Job]
             ChatInitJob[DynamoDB Init Job]
@@ -25,6 +26,8 @@ flowchart TB
             KubeMetrics[kube-state-metrics]
             Loki[Loki]
             Alloy[Grafana Alloy]
+            OTel[OpenTelemetry Collector]
+            Tempo[Tempo]
         end
     end
 
@@ -35,6 +38,8 @@ flowchart TB
     BackendPods --> Postgres
     ChatPods --> Redis
     ChatPods --> Dynamo
+    HPA --> BackendPods
+    HPA --> ChatPods
 
     MigrateJob --> Postgres
     ChatInitJob --> Dynamo
@@ -43,5 +48,9 @@ flowchart TB
     Prometheus -->|ServiceMonitor| ChatSvc
 
     Alloy -->|Pod logs| Loki
+    BackendPods -->|OTLP traces| OTel
+    ChatPods -->|OTLP traces| OTel
+    OTel --> Tempo
     Grafana --> Prometheus
     Grafana --> Loki
+    Grafana --> Tempo
