@@ -327,7 +327,25 @@ kubectl describe pod <pod-name> -n internship
 
 ## Open Observability
 
-Grafana:
+Grafana is exposed locally on port `3001`. Prometheus is exposed locally on port
+`9092`. Keep each `kubectl port-forward` command running in its own terminal
+while you use the URL from another terminal or browser.
+
+Check that the monitoring services are running:
+
+```bash
+kubectl get pods,svc -n monitoring
+```
+
+### Grafana
+
+Windows PowerShell:
+
+```powershell
+kubectl port-forward service/kube-prometheus-stack-grafana 3001:80 -n monitoring
+```
+
+macOS or Linux:
 
 ```bash
 kubectl port-forward service/kube-prometheus-stack-grafana 3001:80 -n monitoring
@@ -345,7 +363,15 @@ Local login:
 admin / admin123
 ```
 
-Prometheus:
+### Prometheus
+
+Windows PowerShell:
+
+```powershell
+kubectl port-forward service/kube-prometheus-stack-prometheus 9092:9090 -n monitoring
+```
+
+macOS or Linux:
 
 ```bash
 kubectl port-forward service/kube-prometheus-stack-prometheus 9092:9090 -n monitoring
@@ -361,6 +387,25 @@ Expected app targets:
 
 - `backend` is `up`
 - `chat-service` is `up`
+
+If the browser shows `ERR_CONNECTION_REFUSED`, the local port-forward is not
+accepting connections. Leave the port-forward terminal open, confirm the service
+exists, and check whether the local port is already in use.
+
+Windows PowerShell:
+
+```powershell
+kubectl get pods,svc -n monitoring
+Get-NetTCPConnection -LocalPort 3001,9092 -ErrorAction SilentlyContinue
+```
+
+macOS or Linux:
+
+```bash
+kubectl get pods,svc -n monitoring
+lsof -nP -iTCP:3001 -sTCP:LISTEN
+lsof -nP -iTCP:9092 -sTCP:LISTEN
+```
 
 Loki query through port-forward:
 
