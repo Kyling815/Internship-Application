@@ -1,0 +1,107 @@
+services:
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.5.3}
+
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+    depends_on:
+      - cadvisor
+
+    restart: unless-stopped
+  cadvisor:
+    image: ghcr.io/google/cadvisor:${CADVISOR_VERSION:-v0.60.5}
+
+    privileged: true
+
+    ports:
+      - "${CADVISOR_PORT:-8080}:8080"
+
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+
+    devices:
+      - /dev/kmsg:/dev/kmsg
+
+    restart: unless-stopped
+  loki:
+    image: grafana/loki:${LOKI_VERSION:-latest}
+
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:${ALLOY_VERSION:-latest}
+
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+
+    ports:
+      - "${ALLOY_PORT:-12345}:12345"
+
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+
+    depends_on:
+      - loki
+
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-latest}
+
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin123}
+
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+
+      GF_LOG_LEVEL: info
+
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+
+    depends_on:
+      - loki
+      - prometheus
+
+    restart: unless-stopped
+
+volumes:
+  loki_data:
+  alloy_data:
+  grafana_data:
+  prometheus_data:

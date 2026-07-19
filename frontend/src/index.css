@@ -182,6 +182,10 @@ textarea {
 
   .app-shell {
     position: relative;
+    --app-z-mobile-bar: 70;
+    --app-z-sidebar: 80;
+    --app-z-mobile-drawer: 90;
+    --app-z-tooltip: 100;
     min-height: 100vh;
     overflow-x: hidden;
     background:
@@ -211,25 +215,34 @@ textarea {
 
   .app-sidebar {
     position: fixed;
-    inset: 0 auto 0 0;
-    z-index: 30;
+    inset: 0.75rem auto 0.75rem 0.75rem;
+    z-index: var(--app-z-sidebar);
     width: 17.5rem;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     overflow: visible; /* To allow tooltips to show outside */
-    border-right: 1px solid rgba(16, 42, 67, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    border-radius: 1.25rem;
     background:
-      linear-gradient(180deg, rgba(255, 253, 246, 0.96), rgba(237, 248, 251, 0.92)),
+      linear-gradient(180deg, rgba(255, 253, 246, 0.94), rgba(237, 248, 251, 0.88)),
       var(--candidate-surface);
     padding: 1.25rem 0.8rem;
-    box-shadow: 12px 0 40px rgba(7, 26, 43, 0.05);
-    backdrop-filter: blur(18px);
-    transition: width 240ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease;
+    box-shadow: 0 18px 48px rgba(7, 26, 43, 0.12);
+    backdrop-filter: blur(22px);
+    transition:
+      width 240ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 180ms ease,
+      background 180ms ease;
   }
 
   .app-sidebar.is-collapsed {
     width: 5rem;
+    box-shadow: 0 14px 34px rgba(7, 26, 43, 0.08);
+  }
+
+  .app-sidebar:not(.is-collapsed) {
+    box-shadow: 0 24px 70px rgba(7, 26, 43, 0.2);
   }
 
   .app-sidebar__top {
@@ -579,7 +592,7 @@ textarea {
     font-size: 0.85rem;
     font-weight: 700;
     box-shadow: 0 4px 12px rgba(7, 26, 43, 0.2);
-    z-index: 100;
+    z-index: var(--app-z-tooltip);
     pointer-events: none;
     animation: tooltip-fade-in 180ms ease-out both;
   }
@@ -602,18 +615,18 @@ textarea {
   
   @media (min-width: 1024px) {
     .app-content {
-      padding-left: 19.5rem;
-    }
-    
-    .app-sidebar.is-collapsed ~ .app-content {
       padding-left: 7rem;
+    }
+
+    .app-content.app-content--flush {
+      padding-left: 6.5rem;
     }
   }
 
   .app-mobile-bar {
     position: sticky;
     top: 0;
-    z-index: 20;
+    z-index: var(--app-z-mobile-bar);
     display: grid;
     grid-template-columns: 2.25rem minmax(0, 1fr) 2.25rem;
     align-items: center;
@@ -646,7 +659,7 @@ textarea {
   .app-mobile-drawer {
     position: fixed;
     inset: 0;
-    z-index: 50;
+    z-index: var(--app-z-mobile-drawer);
   }
 
   .app-mobile-drawer__scrim {

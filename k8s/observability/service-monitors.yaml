@@ -1,0 +1,42 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backend
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: internship-platform
+spec:
+  namespaceSelector:
+    matchNames:
+      - internship
+  selector:
+    matchLabels:
+      app: backend
+  jobLabel: app.kubernetes.io/name
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: chat-service
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: internship-platform
+spec:
+  namespaceSelector:
+    matchNames:
+      - internship
+  selector:
+    matchLabels:
+      app: chat-service
+  jobLabel: app.kubernetes.io/name
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+

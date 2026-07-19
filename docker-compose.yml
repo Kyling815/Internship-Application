@@ -24,6 +24,9 @@ services:
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
       APP_DEBUG: ${APP_DEBUG:-true}
+      APP_ENV: ${APP_ENV:-development}
+      SERVICE_NAME: ${BACKEND_SERVICE_NAME:-internship-api}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
       STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
       LOCAL_UPLOAD_DIR: ${LOCAL_UPLOAD_DIR:-uploads}
@@ -49,10 +52,99 @@ services:
       context: ./frontend
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:${BACKEND_PORT:-8001}}
+      VITE_CHAT_API_BASE_URL: ${VITE_CHAT_API_BASE_URL:-http://localhost:${CHAT_PORT:-3000}}
     ports:
       - "5173:5173"
     depends_on:
       - backend
+  chat-service:
+    build:
+      context: ./chat-service
 
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      CHAT_CORS_ORIGIN: ${CHAT_CORS_ORIGIN:-http://localhost:5173}
+
+      REDIS_URL: redis://redis:6379
+      REDIS_ENABLED: ${REDIS_ENABLED:-true}
+      REDIS_ADAPTER_REQUIRED: ${REDIS_ADAPTER_REQUIRED:-false}
+
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-local}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-local}
+      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+
+      DYNAMODB_USERS_TABLE: ${DYNAMODB_USERS_TABLE:-ChatUsers}
+      DYNAMODB_GROUPS_TABLE: ${DYNAMODB_GROUPS_TABLE:-ChatGroups}
+      DYNAMODB_MESSAGES_TABLE: ${DYNAMODB_MESSAGES_TABLE:-ChatMessages}
+
+    ports:
+      - "${CHAT_PORT:-3000}:3000"
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+      dynamodb-local:
+        condition: service_started
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+    restart: unless-stopped
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+
+    working_dir: /home/dynamodblocal
+
+    command:
+      - -jar
+      - DynamoDBLocal.jar
+      - -sharedDb
+      - -inMemory
+
+    ports:
+      - "${DYNAMODB_PORT:-8000}:8000"
+
+    restart: unless-stopped
 volumes:
   postgres_data:
+  redis_data:

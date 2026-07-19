@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chat-init
+  namespace: internship
+
+spec:
+  backoffLimit: 5
+
+  template:
+    metadata:
+      labels:
+        app: chat-init
+
+    spec:
+      serviceAccountName: internship-app
+      restartPolicy: Never
+
+      containers:
+        - name: init
+          image: internship-chat:local
+          imagePullPolicy: IfNotPresent
+
+          command:
+            - npm
+            - run
+            - init:db
+
+          envFrom:
+            - configMapRef:
+                name: internship-config
+
+            - secretRef:
+                name: internship-secrets

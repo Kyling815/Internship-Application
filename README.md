@@ -1,643 +1,632 @@
-# AI-Powered Internship Application Tracker on AWS
+# Internship Application Platform
 
-A full-stack MVP for students to manage internship applications, upload supporting documents, and compare a CV against a job description with a local AI/NLP scoring module. The app runs locally with Docker Compose and is structured so storage, database, logging, and deployment settings can move to AWS through environment variables.
+Full-stack internship application platform with candidate/HR workflows, document upload, CV-job matching, realtime chat, local Kubernetes, and an EKS deployment path.
 
-## Features
+The current architecture is centered on Kubernetes:
 
-- JWT authentication with registration, login, and current user profile.
-- User-isolated internship application CRUD.
-- Document uploads for CV, transcript, certificate, and other files.
-- Local development file storage with a switchable S3 storage service.
-- Role-based candidate and HR accounts.
-- Candidate profile, job board browsing, and job application submission with existing uploaded documents.
-- HR company profile management, job posting CRUD, applicant review, and status updates.
-- Status timeline for HR-driven candidate job application changes.
-- Local AI/NLP CV-job matching with skill extraction, TF-IDF cosine similarity, suggestions, cover letter draft, and interview questions.
-- Dashboard statistics for applications, statuses, documents, average AI score, and recent activity.
-- Dockerfiles for frontend and backend plus Docker Compose for FastAPI and Vite.
-- Alembic migration, seed script, and backend tests.
+- Local demo/dev: `kind` cluster named `internship-local`.
+- Local app dependencies: PostgreSQL, Redis, and DynamoDB Local in Kubernetes.
+- Backend: FastAPI + SQLAlchemy + Alembic.
+- Chat: Node.js + Express + Socket.IO + Redis adapter + DynamoDB tables.
+- Frontend: React + Vite, run locally in dev and deployed to S3/CloudFront in production.
+- Observability: Prometheus, Grafana, Loki, Alloy, OpenTelemetry Collector, and Tempo.
+- Production path: EKS + ALB + ECR + RDS PostgreSQL + DynamoDB + ElastiCache/Valkey + S3 + CloudFront + GitHub Actions OIDC.
+
+## Quick Links
+
+- Kubernetes runbook: [k8s/RUNBOOK.md](k8s/RUNBOOK.md)
+- Local Kubernetes script for Windows: [scripts/k8s/deploy-local.ps1](scripts/k8s/deploy-local.ps1)
+- Local Kubernetes script for macOS/Linux: [scripts/k8s/deploy-local.sh](scripts/k8s/deploy-local.sh)
+- EKS deploy script: [scripts/k8s/deploy-eks.sh](scripts/k8s/deploy-eks.sh)
+- GitHub Actions workflows: [.github/workflows](.github/workflows)
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Student[Student Browser] --> Frontend[React + Vite + Tailwind]
-    Frontend --> API[FastAPI Backend]
-    API --> Auth[JWT Auth + bcrypt]
-    API --> DB[(PostgreSQL)]
-    API --> Storage{Storage Service}
-    Storage --> Local[Local uploads folder]
-    Storage --> S3[Amazon S3]
-    API --> AI[Local AI/NLP Module]
-    AI --> Skills[Skill Dictionary]
-    AI --> TFIDF[TF-IDF + Cosine Similarity]
-    API --> Logs[stdout logs]
-    Logs --> CloudWatch[CloudWatch Ready]
-    DB --> RDS[Amazon RDS Ready]
+    Browser["Browser"]
+    Frontend["React + Vite frontend\nlocal dev: 5173\nprod: S3 + CloudFront"]
+
+    subgraph LocalKind["Local kind cluster: internship-local"]
+        Nginx["ingress-nginx\n127.0.0.1:8080"]
+        Backend["FastAPI backend\n2+ pods, /metrics, OTLP"]
+        Chat["Node Socket.IO chat\n2+ pods, /metrics, OTLP"]
+        Postgres[("PostgreSQL")]
+        Redis[("Redis")]
+        DynamoLocal[("DynamoDB Local")]
+
+        Prom["Prometheus"]
+        Grafana["Grafana"]
+        Loki["Loki"]
+        Alloy["Alloy"]
+        OTel["OpenTelemetry Collector"]
+        Tempo["Tempo"]
+    end
+
+    Browser --> Frontend
+    Frontend -->|"REST API"| Nginx
+    Frontend -->|"Socket.IO / chat API"| Nginx
+    Nginx --> Backend
+    Nginx --> Chat
+    Backend --> Postgres
+    Chat --> Redis
+    Chat --> DynamoLocal
+
+    Backend -->|"metrics"| Prom
+    Chat -->|"metrics"| Prom
+    Backend -->|"traces"| OTel
+    Chat -->|"traces"| OTel
+    OTel --> Tempo
+    Alloy -->|"pod logs"| Loki
+    Prom --> Grafana
+    Loki --> Grafana
+    Tempo --> Grafana
+
+    subgraph AWS["AWS production path"]
+        ALB["AWS ALB ingress"]
+        EKS["EKS"]
+        ECR["ECR images"]
+        RDS[("RDS PostgreSQL")]
+        DDB[("DynamoDB")]
+        Valkey[("ElastiCache / Valkey Redis")]
+        S3["S3 frontend/assets"]
+        CF["CloudFront"]
+    end
+
+    ECR --> EKS
+    ALB --> EKS
+    EKS --> RDS
+    EKS --> DDB
+    EKS --> Valkey
+    S3 --> CF
 ```
 
-## Tech Stack
+## Main Features
 
-- Frontend: React, Vite, Tailwind CSS, Axios, React Router, lucide-react
-- Backend: FastAPI, SQLAlchemy, Alembic, Pydantic
-- Database: PostgreSQL
-- Auth: JWT with python-jose, passlib, bcrypt
-- Storage: local files in development, S3-compatible storage with boto3 in production
-- AI/NLP: skill dictionary, scikit-learn TF-IDF, cosine similarity
-- Deployment: Docker, Docker Compose, AWS-ready environment variables
+- JWT authentication with candidate and HR roles.
+- Candidate dashboard, profile, job browsing, applications, documents, and status timeline.
+- HR company profile, job posting, applicant review, document download, and status updates.
+- Document upload with local storage in development and S3-compatible storage in production.
+- Local CV-job matching using skill extraction and TF-IDF cosine similarity.
+- Realtime chat with Socket.IO, Redis scaling adapter, and DynamoDB-backed chat data.
+- Kubernetes health probes, Alembic migration Job, chat table initialization Job, HPA, PDB, ingress, and sticky chat sessions.
+- Metrics, logs, and traces through Prometheus, Loki, Alloy, OpenTelemetry, Tempo, and Grafana.
+- CI and deployment workflows for tests, image build/push, EKS rollout, frontend S3 upload, and CloudFront invalidation.
 
-## Project Structure
+## Repository Layout
 
 ```text
-backend/
-  app/
-    main.py
-    core/
-    db/
-    routers/
-    services/
-    seed.py
-  alembic/
-  tests/
-  requirements.txt
-  Dockerfile
-frontend/
-  src/
-    api/
-    components/
-    context/
-    pages/
-    routes/
-  package.json
-  Dockerfile
-docker-compose.yml
-.env.example
-README.md
+backend/                 FastAPI app, Alembic migrations, tests
+chat-service/            Node.js chat service, Socket.IO, DynamoDB, Redis
+frontend/                React + Vite frontend
+k8s/app/                 App namespaces, config, deps, jobs, deployments, ingress, HPA, PDB
+k8s/platform/            ingress-nginx and metrics-server Helm values
+k8s/observability/       Prometheus, Grafana, Loki, Alloy, Tempo, OTel manifests/values
+k8s/eks/                 EKS config, ALB ingress, service account, secret template
+scripts/k8s/             Local and EKS deployment scripts
+observability/           Docker Compose observability reference configs
+.github/workflows/       CI, EKS deploy, frontend deploy
+docker-compose.yml       Optional Compose stack for local non-k8s development
 ```
 
-## Run Database, Backend, And Frontend Separately
+## Local Kubernetes Quick Start
 
-Run these commands from the repository root, where `docker-compose.yml` is located. Docker Compose starts a local PostgreSQL database and the backend connects to it through `DATABASE_URL`.
+Prerequisites:
 
-Copy the environment file if `.env` does not exist:
+- Docker Desktop or Docker Engine
+- kubectl
+- kind
+- Helm
 
-```bash
-cp .env.example .env
-```
-
-PowerShell equivalent:
+Windows PowerShell:
 
 ```powershell
-Copy-Item .env.example .env
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\scripts\k8s\deploy-local.ps1 -RecreateCluster
 ```
 
-Configure `.env` before starting anything. For local access:
-
-```env
-DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/internship_tracker
-POSTGRES_DB=internship_tracker
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_PORT=5432
-BACKEND_PORT=8001
-VITE_API_BASE_URL=http://localhost:8001
-BACKEND_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-```
-
-For EC2, replace `localhost` with the EC2 public IP in `VITE_API_BASE_URL` and `BACKEND_CORS_ORIGINS`.
-
-### 1. Database
-
-Start the local PostgreSQL container:
+macOS/Linux:
 
 ```bash
-docker compose up -d db
+chmod +x scripts/k8s/deploy-local.sh
+./scripts/k8s/deploy-local.sh --recreate-cluster
 ```
 
-### 2. Database Migration
-
-Build the backend image, apply migrations to local PostgreSQL, and confirm the current revision:
-
-```bash
-docker compose build backend
-docker compose run --rm backend alembic upgrade head
-docker compose run --rm backend alembic current
-```
-
-### 3. Backend And Seed Data
-
-Start only the backend:
-
-```bash
-docker compose up -d --no-deps backend
-docker compose logs --tail=100 backend
-curl --fail http://127.0.0.1:8001/health
-```
-
-Load the idempotent demo seed after the backend is healthy:
-
-```bash
-docker compose exec -T backend python -m app.seed
-```
-
-Backend endpoints:
+The local cluster exposes:
 
 ```text
-API docs: http://localhost:8001/docs
-Health: http://localhost:8001/health
+Backend API: http://api.internship.localhost:8080
+Chat API:    http://chat.internship.localhost:8080
 ```
 
-### 4. Frontend
+Health checks:
 
-Start only the frontend without asking Compose to manage its backend dependency:
+Windows:
+
+```powershell
+Invoke-RestMethod http://api.internship.localhost:8080/health/ready
+Invoke-RestMethod http://chat.internship.localhost:8080/health/ready
+```
+
+macOS/Linux:
 
 ```bash
-docker compose up -d --build --no-deps frontend
-docker compose logs --tail=100 frontend
-curl --fail http://127.0.0.1:5173
+curl --noproxy '*' http://api.internship.localhost:8080/health/ready
+curl --noproxy '*' http://chat.internship.localhost:8080/health/ready
 ```
 
-Open `http://localhost:5173`. For EC2, replace `localhost` with the EC2 public IP and allow ports `5173` and `8001` only from the administrator's public IP while testing.
+Expected responses:
 
-### Manage Services Separately
-
-```bash
-# Follow logs
-docker compose logs -f backend
-docker compose logs -f frontend
-
-# Restart one service
-docker compose restart backend
-docker compose restart frontend
-
-# Stop one service
-docker compose stop frontend
-docker compose stop backend
-
-# Remove both application containers and their network
-docker compose down
+```json
+{"status":"ready","service":"internship-api","dependencies":{"postgres":true}}
+{"status":"ready","dependencies":{"redis":true,"dynamodb":true}}
 ```
 
-Run checks separately:
+## Open The Current Web App
 
-```bash
-docker compose run --rm backend pytest
-docker compose run --rm frontend npm run build
+The frontend is not deployed into local `kind`. Run it as a local Vite dev server and point it to the Kubernetes ingress.
+
+Windows PowerShell:
+
+```powershell
+Push-Location frontend
+npm install
+$env:VITE_API_BASE_URL = "http://api.internship.localhost:8080"
+$env:VITE_CHAT_API_BASE_URL = "http://chat.internship.localhost:8080"
+npm run dev -- --host 127.0.0.1
 ```
 
-The backend image also runs `alembic upgrade head` before Uvicorn starts. The default host backend port is `8001`.
-
-## Running Backend Without Docker
-
-If you run FastAPI directly with Uvicorn on Windows, use the same AWS RDS `DATABASE_URL` from `.env`.
-
-If PostgreSQL is running through Docker Compose and Uvicorn is running directly on Windows, use `localhost` instead of the Compose service name:
-
-```env
-DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/internship_tracker
-```
-
-For AWS RDS, use this shape in `.env` and replace `<PASSWORD>` with the RDS database password:
-
-```env
-DATABASE_URL=postgresql+psycopg2://postgres:<URL_ENCODED_PASSWORD>@internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com:5432/postgres?schema=public&sslmode=require
-```
-
-Do not surround this value with quotes when using `docker run --env-file`. If the password contains special URL characters such as `@`, `#`, `/`, `:` or `%`, URL-encode it before placing it in `DATABASE_URL`.
-
-Then run:
-
-```bash
-cd backend
-uvicorn app.main:app --reload --port 8001
-```
-
-## Running Frontend Without Docker
-
-Run the backend first, then start the Vite frontend:
+macOS/Linux:
 
 ```bash
 cd frontend
 npm install
-npm run dev
+VITE_API_BASE_URL=http://api.internship.localhost:8080 \
+VITE_CHAT_API_BASE_URL=http://chat.internship.localhost:8080 \
+npm run dev -- --host 127.0.0.1
 ```
 
 Open:
 
 ```text
-Frontend: http://localhost:5173
-Backend: http://127.0.0.1:8001
+http://127.0.0.1:5173
 ```
 
-## Seed Demo Data
+Keep the Vite terminal open while using the site.
 
-After the backend container is running:
+Alternative: run only the frontend with Docker Compose while backend/chat stay in kind:
+
+Windows:
+
+```powershell
+$env:VITE_API_BASE_URL = "http://api.internship.localhost:8080"
+$env:VITE_CHAT_API_BASE_URL = "http://chat.internship.localhost:8080"
+docker compose up -d --build --no-deps frontend
+docker compose logs -f frontend
+```
+
+macOS/Linux:
 
 ```bash
-docker compose exec backend python -m app.seed
+VITE_API_BASE_URL=http://api.internship.localhost:8080 \
+VITE_CHAT_API_BASE_URL=http://chat.internship.localhost:8080 \
+docker compose up -d --build --no-deps frontend
+docker compose logs -f frontend
 ```
 
-Demo login:
+Then open `http://127.0.0.1:5173`.
+
+If port `5173` is busy:
+
+Windows:
+
+```powershell
+Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue |
+  Select-Object LocalAddress,LocalPort,OwningProcess
+```
+
+macOS/Linux:
+
+```bash
+lsof -nP -iTCP:5173 -sTCP:LISTEN
+```
+
+## Check What Is Running
+
+Use `kubectl` for pods. Docker Desktop usually shows only the `kind` node containers, not every Kubernetes pod.
+
+```bash
+kubectl config current-context
+kubectl get nodes -o wide
+kubectl get pods -n internship
+kubectl get pods -n monitoring
+kubectl get pods -A
+```
+
+App overview:
+
+```bash
+kubectl get pods,svc,ingress,hpa,pdb -n internship
+kubectl wait --for=condition=complete job/backend-migrate job/chat-init -n internship --timeout=30s
+```
+
+If you use Docker Desktop, the containers you should expect to see are the kind nodes:
 
 ```text
-Email: demo@student.edu
-Password: password123
+internship-local-control-plane
+internship-local-worker
+internship-local-worker2
 ```
 
-## Running Tests
+For a terminal UI:
 
-With local Python dependencies installed:
+Windows:
+
+```powershell
+winget install derailed.k9s
+k9s --context kind-internship-local -n internship
+```
+
+macOS:
 
 ```bash
-cd backend
-pip install -r requirements.txt
-pytest
+brew install k9s
+k9s --context kind-internship-local -n internship
 ```
 
-Or inside the backend container:
+## Check Logs
+
+Backend logs:
 
 ```bash
-docker compose exec backend pytest
+kubectl logs deployment/backend -n internship --tail=100
+kubectl logs deployment/backend -n internship -f --tail=100
 ```
 
-## Environment Variables
-
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | AWS RDS PostgreSQL connection string used by FastAPI, SQLAlchemy, and Alembic |
-| `SECRET_KEY` | JWT signing secret |
-| `BACKEND_CORS_ORIGINS` | Comma-separated allowed frontend origins |
-| `BACKEND_PORT` | Host port mapped to the backend container |
-| `STORAGE_BACKEND` | `local` or `s3` |
-| `LOCAL_UPLOAD_DIR` | Local upload directory |
-| `MAX_UPLOAD_SIZE_MB` | Upload size limit |
-| `ALLOWED_UPLOAD_EXTENSIONS` | Comma-separated upload extensions |
-| `AWS_REGION` | AWS region for S3 |
-| `AWS_ACCESS_KEY_ID` | Optional local AWS key; leave empty when using IAM roles |
-| `AWS_SECRET_ACCESS_KEY` | Optional local AWS secret; leave empty when using IAM roles |
-| `AWS_SESSION_TOKEN` | Optional local session token for temporary credentials |
-| `S3_BUCKET` | Production S3 bucket name |
-| `S3_ENDPOINT_URL` | Optional S3-compatible endpoint |
-| `S3_PUBLIC_BASE_URL` | Leave blank for private S3 documents; downloads use presigned URLs |
-| `VITE_API_BASE_URL` | Frontend API base URL |
-
-Do not commit real credentials. For AWS, prefer instance roles, task roles, or managed secret injection over static access keys.
-
-For local S3 testing with your AWS CLI profile, configure credentials outside the project:
+Chat logs:
 
 ```bash
-aws configure
+kubectl logs deployment/chat-service -n internship --tail=100
+kubectl logs deployment/chat-service -n internship -f --tail=100
 ```
 
-Docker Compose mounts your host `~/.aws` folder into the backend container as read-only, so the container can use the same default AWS CLI profile when `STORAGE_BACKEND=s3`.
-
-Then set S3 storage variables in `.env`:
-
-```env
-STORAGE_BACKEND=s3
-AWS_REGION=ap-southeast-2
-S3_BUCKET=your-private-bucket
-S3_ENDPOINT_URL=
-S3_PUBLIC_BASE_URL=
-```
-
-The backend uses boto3's default credential chain. Leave `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` empty when using AWS CLI credentials or IAM roles.
-Presigned download URLs are generated directly by boto3 with Signature Version 4 and the configured `AWS_REGION`. Do not use `S3_PUBLIC_BASE_URL` for private document downloads; keep it blank unless you intentionally make a separate public asset flow.
-
-## API Endpoint Summary
-
-### Authentication
-
-- `POST /auth/register`
-- `POST /auth/login`
-- `GET /auth/me`
-
-Registration supports:
-
-- `candidate`
-- `hr`
-- `admin` reserved for future use
-
-### Applications
-
-- `GET /applications`
-- `POST /applications`
-- `GET /applications/{id}`
-- `PUT /applications/{id}`
-- `DELETE /applications/{id}`
-
-These are the original personal tracker endpoints for candidate-owned application notes and uploads.
-
-### Documents
-
-- `POST /documents/upload` - S3 smoke-test only; not authenticated and not saved to the database
-- `POST /applications/{id}/documents`
-- `GET /applications/{id}/documents`
-- `DELETE /documents/{id}`
-- `GET /documents/{id}/download-url`
-
-### Document Upload Flow
-
-`POST /documents/upload` is only a non-production S3 smoke-test route. It uploads to a demo path like `users/demo-user/documents/...` and returns a presigned URL, but it does not create a database record and is not connected to an internship application.
-
-The real document workflow is application-scoped and authenticated:
-
-1. Register or log in.
-2. Create an internship application with `POST /applications`.
-3. Upload a document with `POST /applications/{id}/documents`.
-4. List documents with `GET /applications/{id}/documents`.
-5. Generate a fresh private download URL with `GET /documents/{id}/download-url`.
-6. Delete the document with `DELETE /documents/{id}`.
-
-The database stores `s3_key`, `file_name`, `document_type`, `user_id`, and `application_id`. It does not store presigned URLs. For S3 storage, `file_url` is kept as an internal value like `s3://bucket/key`; use the download-url endpoint to access files.
-For `AWS_REGION=ap-southeast-2`, returned presigned URLs should use the regional virtual-hosted endpoint, for example `https://your-bucket.s3.ap-southeast-2.amazonaws.com/...`.
-
-### Candidate Platform
-
-- `GET /candidate/profile`
-- `PUT /candidate/profile`
-- `GET /candidate/dashboard`
-- `GET /candidate/documents`
-- `GET /candidate/job-applications`
-- `GET /candidate/job-applications/{id}`
-- `PATCH /candidate/job-applications/{id}/withdraw`
-
-### Company / HR Company Profile
-
-- `POST /companies`
-- `GET /companies/me`
-- `PUT /companies/{company_id}`
-
-### Public / Candidate Jobs
-
-- `GET /jobs`
-- `GET /jobs/{job_id}`
-- `POST /jobs/{job_id}/apply`
-
-### HR Jobs and Applicants
-
-- `GET /hr/dashboard`
-- `POST /hr/jobs`
-- `GET /hr/jobs`
-- `GET /hr/jobs/{job_id}`
-- `PUT /hr/jobs/{job_id}`
-- `DELETE /hr/jobs/{job_id}`
-- `PATCH /hr/jobs/{job_id}/status`
-- `GET /hr/jobs/{job_id}/applications`
-- `GET /hr/applications/{application_id}`
-- `PATCH /hr/applications/{application_id}/status`
-- `GET /hr/applications/{application_id}/documents`
-- `GET /hr/documents/{document_id}/download-url`
-
-Example curl upload:
+Migration/init job logs:
 
 ```bash
-curl -X POST "http://localhost:8001/applications/1/documents" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -F "document_type=CV" \
-  -F "file=@cv.pdf"
+kubectl logs job/backend-migrate -n internship
+kubectl logs job/chat-init -n internship
 ```
 
-Example curl download URL:
+Local dependency logs:
 
 ```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  "http://localhost:8001/documents/1/download-url"
+kubectl logs deployment/postgres -n internship --tail=100
+kubectl logs deployment/redis -n internship --tail=100
+kubectl logs deployment/dynamodb-local -n internship --tail=100
 ```
 
-Example curl delete:
+Ingress logs:
 
 ```bash
-curl -X DELETE -H "Authorization: Bearer YOUR_TOKEN" \
-  "http://localhost:8001/documents/1"
+kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller -f --tail=100
 ```
 
-### Full Browser Test Flow
+Observability logs:
 
-#### Candidate tracker + S3 document flow
+```bash
+kubectl logs deployment/otel-collector -n monitoring --tail=100
+kubectl logs statefulset/loki -n monitoring --tail=100
+kubectl logs statefulset/tempo -n monitoring --tail=100
+```
 
-1. Start the backend on `http://127.0.0.1:8001`.
-2. Start the frontend on `http://localhost:5173`.
-3. Register a new user or sign in.
-4. Create an internship application.
-5. Open the application detail page from the dashboard or applications list.
-6. In the Documents section, choose a file and document type, then upload it.
-7. Confirm the uploaded document appears in the list with its type and timestamp.
-8. Click the download button.
-9. The frontend calls `GET /documents/{id}/download-url` and opens the returned temporary presigned S3 URL in a new tab.
-10. Confirm the file opens or downloads.
-11. Delete the document and confirm it disappears from the list and is removed from S3.
+Describe a pod when it is not ready:
 
-#### Phase 2.5 two-sided platform demo
+```bash
+kubectl describe pod <pod-name> -n internship
+```
 
-1. Register an `hr` user from the frontend register page.
-2. Sign in as HR and confirm you land on `/hr/dashboard`.
-3. Open `/hr/company` and create a company profile.
-4. Open `/hr/jobs/new` and create a draft internship posting.
-5. Publish the job from `/hr/jobs/:jobId` or the HR jobs list.
-6. Register a `candidate` user.
-7. Sign in as candidate and confirm you land on `/candidate/dashboard`.
-8. Upload a candidate document through the existing personal tracker:
-   - create a tracker application
-   - open its detail page
-   - upload a CV/document in the Documents section
-9. Browse `/candidate/jobs` and open the published job.
-10. Apply using `/candidate/jobs/:jobId/apply` and select the existing uploaded document.
-11. Open `/candidate/job-applications` and confirm the submitted application appears.
-12. Sign back in as HR.
-13. Open `/hr/jobs/:jobId/applicants`.
-14. Open the applicant detail page.
-15. Download the attached candidate document using the HR download button.
-16. Update the applicant status to `shortlisted`.
-17. Sign back in as the candidate.
-18. Open `/candidate/job-applications/:applicationId` and confirm the status timeline shows the update.
-19. Withdraw the application if desired.
+## Open Observability
 
-### AI
+Grafana:
 
-- `POST /applications/{id}/ai/analyze`
-- `GET /applications/{id}/ai/result`
-- `POST /applications/{id}/ai/interview-questions`
+```bash
+kubectl port-forward service/kube-prometheus-stack-grafana 3001:80 -n monitoring
+```
 
-### Dashboard
-
-- `GET /dashboard/stats`
-
-## Database Schema Summary
-
-- `users`: email, full name, hashed password, active flag, created timestamp.
-- `internship_applications`: user-owned role data, job description, status, deadline, notes, timestamps.
-- `documents`: user and application ownership, document type, file metadata, storage key.
-- `ai_analysis_results`: CV text, job description snapshot, score, matched skills, missing skills, suggestions, cover letter.
-- `interview_questions`: generated questions and answer hints per application.
-
-## AI Module Explanation
-
-The first MVP runs locally and avoids external AI costs. It extracts skills from a fixed dictionary, compares required job skills with candidate CV skills, and blends the result with TF-IDF cosine similarity.
-
-Scoring:
+Open:
 
 ```text
-skill_score = matched required skills / total required skills
-text_similarity_score = TF-IDF cosine similarity between CV text and job description
-final_score = 70% skill_score + 30% text_similarity_score
+http://127.0.0.1:3001
 ```
 
-The result includes an integer score from 0 to 100, matched skills, missing skills, suggested CV improvements, a cover letter draft, and generated interview questions.
+Local login:
 
-For the MVP, users can paste CV text manually or select an uploaded `.txt` CV. PDF and DOCX extraction are listed as future improvements.
-
-Phase 2.5 does not add any new HR-side AI ranking or screening logic. The new candidate/HR platform foundation is intentionally preparing the workflow first.
-
-## AWS Deployment Plan
-
-- Frontend: build the React app with `npm run build` and deploy static files to Amazon S3 static hosting with CloudFront, or serve it from EC2.
-- Backend: deploy the FastAPI Docker image to EC2, ECS, or App Runner. A later version can adapt selected endpoints to Lambda and API Gateway.
-- Database: use Amazon RDS for PostgreSQL and set `DATABASE_URL`.
-- File storage: set `STORAGE_BACKEND=s3`, configure `S3_BUCKET`, and grant the backend an IAM role with least-privilege S3 access. The app generates presigned download URLs for private S3 objects.
-- Logs: keep stdout logging and ship container logs to CloudWatch.
-- Secrets: store production secrets in AWS Secrets Manager, SSM Parameter Store, ECS secrets, or EC2 instance configuration.
-
-### EC2 Backend With Private RDS
-
-The backend uses SQLAlchemy at runtime and Alembic for database migrations. Keep RDS private and allow PostgreSQL traffic from the EC2 security group to the RDS security group.
-
-On Amazon Linux 2023, connect to the EC2 instance and install the required tools:
-
-```bash
-sudo dnf update -y
-sudo dnf install -y git docker nmap-ncat curl
-sudo systemctl enable --now docker
-sudo usermod -aG docker ec2-user
-exit
+```text
+admin / admin123
 ```
 
-Reconnect so the Docker group membership takes effect, then install the Docker Compose v2 CLI plugin if it is not already available:
+Prometheus:
 
 ```bash
-if ! docker compose version >/dev/null 2>&1; then
-  case "$(uname -m)" in
-    x86_64) COMPOSE_ARCH=x86_64 ;;
-    aarch64|arm64) COMPOSE_ARCH=aarch64 ;;
-    *) echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
-  esac
-
-  mkdir -p "$HOME/.docker/cli-plugins"
-  curl -SL \
-    "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${COMPOSE_ARCH}" \
-    -o "$HOME/.docker/cli-plugins/docker-compose"
-  chmod +x "$HOME/.docker/cli-plugins/docker-compose"
-fi
-
-docker compose version
+kubectl port-forward service/kube-prometheus-stack-prometheus 9092:9090 -n monitoring
 ```
 
-Install the latest Docker Buildx plugin because the version bundled with Amazon Linux may be too old for current Compose releases:
+Open:
 
-```bash
-case "$(uname -m)" in
-  x86_64) BUILDX_ARCH=amd64 ;;
-  aarch64|arm64) BUILDX_ARCH=arm64 ;;
-  *) echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
-esac
-
-BUILDX_VERSION=$(curl -fsSL \
-  https://api.github.com/repos/docker/buildx/releases/latest \
-  | awk -F '"' '/tag_name/ {print $4; exit}')
-
-test -n "$BUILDX_VERSION"
-mkdir -p "$HOME/.docker/cli-plugins"
-curl -fSL \
-  "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-${BUILDX_ARCH}" \
-  -o "$HOME/.docker/cli-plugins/docker-buildx"
-chmod +x "$HOME/.docker/cli-plugins/docker-buildx"
-
-docker buildx version
+```text
+http://127.0.0.1:9092/targets
 ```
 
-Then verify private RDS connectivity:
+Expected app targets:
+
+- `backend` is `up`
+- `chat-service` is `up`
+
+Loki query through port-forward:
 
 ```bash
-nc -vz internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com 5432
+kubectl port-forward service/loki-gateway 3101:80 -n monitoring
 ```
 
-Clone and configure the backend:
+Then:
 
 ```bash
-git clone https://github.com/Kyling815/Internship-Application.git
-cd Internship-Application
+curl --noproxy '*' -G "http://127.0.0.1:3101/loki/api/v1/query_range" --data-urlencode 'query={namespace="internship"}' --data-urlencode 'limit=5'
+```
+
+Tempo trace smoke test:
+
+```bash
+curl --noproxy '*' http://api.internship.localhost:8080/openapi.json >/dev/null
+curl --noproxy '*' http://chat.internship.localhost:8080/api/status >/dev/null
+kubectl port-forward service/tempo 3201:3200 -n monitoring
+curl --noproxy '*' http://127.0.0.1:3201/metrics | grep tempo_distributor_spans_received_total
+```
+
+## Daily Development Loop
+
+After backend or chat-service changes:
+
+Windows:
+
+```powershell
+.\scripts\k8s\deploy-local.ps1 -SkipCluster -SkipObservability
+```
+
+macOS/Linux:
+
+```bash
+./scripts/k8s/deploy-local.sh --skip-cluster --skip-observability
+```
+
+If pods still run old behavior, rebuild, load images into kind, and restart:
+
+```bash
+docker build -t internship-api:local ./backend
+docker build -t internship-chat:local ./chat-service
+kind load docker-image internship-api:local --name internship-local
+kind load docker-image internship-chat:local --name internship-local
+kubectl rollout restart deployment/backend deployment/chat-service -n internship
+```
+
+After frontend changes:
+
+```bash
+cd frontend
+npm run build
+npm run dev -- --host 127.0.0.1
+```
+
+## Optional Docker Compose Mode
+
+Docker Compose is still useful for simpler local development without Kubernetes.
+
+Copy the env file:
+
+Windows:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+macOS/Linux:
+
+```bash
 cp .env.example .env
-nano .env
-chmod 600 .env
 ```
 
-Set at least these production values in `.env`:
-
-```env
-DATABASE_URL=postgresql+psycopg2://postgres:<URL_ENCODED_PASSWORD>@internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com:5432/postgres?schema=public&sslmode=require
-SECRET_KEY=<LONG_RANDOM_VALUE>
-APP_DEBUG=false
-BACKEND_CORS_ORIGINS=https://<FRONTEND_DOMAIN>
-STORAGE_BACKEND=s3
-AWS_REGION=<S3_BUCKET_REGION>
-S3_BUCKET=<S3_BUCKET_NAME>
-```
-
-Build the image and apply the Alembic migrations:
+Start the core Compose app:
 
 ```bash
-docker build -t internship-tracker-backend:latest ./backend
-docker run --rm --env-file .env internship-tracker-backend:latest alembic upgrade head
+docker compose up -d --build db redis dynamodb-local backend chat-service frontend
 ```
 
-Start the backend and verify it:
+Open:
+
+```text
+Frontend: http://127.0.0.1:5173
+Backend:  http://127.0.0.1:8001
+Chat:     http://127.0.0.1:3000
+```
+
+Compose logs:
 
 ```bash
-docker rm -f internship-tracker-backend 2>/dev/null || true
-docker run -d \
-  --name internship-tracker-backend \
-  --restart unless-stopped \
-  --env-file .env \
-  -p 8001:8000 \
-  internship-tracker-backend:latest
-
-docker logs --tail=100 internship-tracker-backend
-curl --fail http://127.0.0.1:8001/health
+docker compose logs -f backend
+docker compose logs -f chat-service
+docker compose logs -f frontend
 ```
 
-Attach an EC2 instance role with the required S3 permissions instead of setting AWS access keys. For containers to retrieve instance-role credentials through IMDSv2, configure the EC2 metadata response hop limit to `2`. Restrict EC2 port `8001` to the load balancer security group, or temporarily to the administrator IP while testing.
+Do not run the Compose observability stack at the same time as kind ingress unless you move `CADVISOR_PORT`, because cAdvisor also uses `8080`.
 
-To deploy a later commit:
+## Testing And Validation
+
+Backend syntax/import smoke check:
 
 ```bash
-cd Internship-Application
-git pull --ff-only
-docker build -t internship-tracker-backend:latest ./backend
-docker run --rm --env-file .env internship-tracker-backend:latest alembic upgrade head
-docker rm -f internship-tracker-backend
-docker run -d \
-  --name internship-tracker-backend \
-  --restart unless-stopped \
-  --env-file .env \
-  -p 8001:8000 \
-  internship-tracker-backend:latest
-curl --fail http://127.0.0.1:8001/health
+python -m py_compile backend/app/main.py backend/app/core/tracing.py
 ```
 
-## Future Improvements
+Chat syntax check:
 
-- PDF and DOCX CV text extraction.
-- Amazon Bedrock provider implementation behind the existing AI service interface.
-- HR-side AI ranking for applicants after the platform workflow is stable.
-- Email reminders for deadlines.
-- Calendar integration.
-- More advanced AI ranking and semantic search.
-- Presigned S3 upload and download URLs.
-- Frontend tests and end-to-end browser tests.
+```bash
+cd chat-service
+npm run check
+```
 
-## Known MVP Limitations
+Frontend build:
 
-- Uploaded PDF and DOCX files are stored but not parsed for AI analysis.
-- The AI module is keyword and TF-IDF based, so it is transparent but not deeply semantic.
-- JWTs are stored in localStorage for demo convenience.
-- The frontend Dockerfile is optimized for local Vite development rather than a production static build image.
+```bash
+cd frontend
+npm run build
+```
+
+Shell script syntax:
+
+```bash
+docker run --rm -v "${PWD}:/repo" -w /repo bash:5.2 bash -n scripts/k8s/deploy-local.sh scripts/k8s/deploy-eks.sh
+```
+
+Whitespace check:
+
+```bash
+git diff --check
+```
+
+## Production/EKS Path
+
+The EKS path uses AWS managed services:
+
+- EKS for backend/chat workloads
+- AWS Load Balancer Controller with ALB ingress
+- ECR for backend/chat images
+- RDS PostgreSQL for backend data
+- DynamoDB for chat tables
+- ElastiCache/Valkey Redis for Socket.IO scaling
+- S3 + CloudFront for frontend static hosting
+- GitHub Actions OIDC for deployment
+
+Required GitHub Environment secrets:
+
+- `AWS_ROLE_TO_ASSUME`
+- `SECRET_KEY`
+- `DATABASE_URL`
+- `REDIS_URL`
+- `S3_BUCKET` when uploads use S3
+
+Required GitHub Environment variables:
+
+- `AWS_REGION`
+- `EKS_CLUSTER_NAME`
+- `ECR_REPOSITORY_BACKEND`
+- `ECR_REPOSITORY_CHAT`
+- `FRONTEND_ORIGIN`
+- `API_HOST`
+- `CHAT_HOST`
+- `IRSA_ROLE_ARN`
+- `VITE_API_BASE_URL`
+- `VITE_CHAT_API_BASE_URL`
+- `FRONTEND_BUCKET`
+- `CLOUDFRONT_DISTRIBUTION_ID`
+
+Workflows:
+
+- `.github/workflows/ci.yml`
+- `.github/workflows/deploy-eks.yml`
+- `.github/workflows/deploy-frontend.yml`
+
+The backend/chat workflow builds SHA-tagged ECR images, applies Kubernetes manifests, runs Alembic and chat init Jobs, rolls out deployments, and can smoke-test public health URLs.
+
+The frontend workflow builds Vite with production API/chat URLs, uploads `frontend/dist` to S3, and invalidates CloudFront.
+
+## Useful Health URLs
+
+Local Kubernetes:
+
+```text
+http://api.internship.localhost:8080/health/live
+http://api.internship.localhost:8080/health/ready
+http://chat.internship.localhost:8080/health/live
+http://chat.internship.localhost:8080/health/ready
+```
+
+Port-forward fallback:
+
+```text
+http://127.0.0.1:8001/health/ready
+http://127.0.0.1:3002/health/ready
+```
+
+Compose mode:
+
+```text
+http://127.0.0.1:8001/health/ready
+http://127.0.0.1:3000/health/ready
+```
+
+## Troubleshooting Shortcuts
+
+Current context:
+
+```bash
+kubectl config current-context
+kubectl config get-contexts
+kubectl config use-context kind-internship-local
+```
+
+Port ownership:
+
+Windows:
+
+```powershell
+Get-NetTCPConnection -LocalPort 5173,8001,8080,8443,3000,3002 -State Listen -ErrorAction SilentlyContinue |
+  Select-Object LocalAddress,LocalPort,OwningProcess
+```
+
+macOS/Linux:
+
+```bash
+lsof -nP -iTCP:5173 -sTCP:LISTEN
+lsof -nP -iTCP:8001 -sTCP:LISTEN
+lsof -nP -iTCP:8080 -sTCP:LISTEN
+lsof -nP -iTCP:8443 -sTCP:LISTEN
+```
+
+Ingress details:
+
+```bash
+docker ps --filter name=internship-local-control-plane
+kubectl get svc -n ingress-nginx ingress-nginx-controller -o wide
+kubectl describe ingress backend chat-service -n internship
+```
+
+Expected kind port mapping:
+
+```text
+127.0.0.1:8080->30080/tcp
+127.0.0.1:8443->30443/tcp
+```
+
+HPA metrics:
+
+```bash
+kubectl get apiservice v1beta1.metrics.k8s.io
+kubectl top pods -n internship
+kubectl get hpa -n internship
+```
+
+Reset local kind:
+
+Windows:
+
+```powershell
+kind delete cluster --name internship-local
+.\scripts\k8s\deploy-local.ps1 -RecreateCluster
+```
+
+macOS/Linux:
+
+```bash
+kind delete cluster --name internship-local
+./scripts/k8s/deploy-local.sh --recreate-cluster
+```

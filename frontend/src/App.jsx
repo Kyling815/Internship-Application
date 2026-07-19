@@ -19,6 +19,7 @@ const CandidateJobApplications = lazyPage(() => import("./pages/CandidateJobAppl
 const CandidateJobDetail = lazyPage(() => import("./pages/CandidateJobDetail"), "CandidateJobDetail");
 const CandidateJobs = lazyPage(() => import("./pages/CandidateJobs"), "CandidateJobs");
 const CandidateProfile = lazyPage(() => import("./pages/CandidateProfile"), "CandidateProfile");
+const Chat = lazyPage(() => import("./pages/Chat"), "Chat");
 const HrApplicationDetail = lazyPage(() => import("./pages/HrApplicationDetail"), "HrApplicationDetail");
 const HrCompany = lazyPage(() => import("./pages/HrCompany"), "HrCompany");
 const HrDashboard = lazyPage(() => import("./pages/HrDashboard"), "HrDashboard");
@@ -33,6 +34,8 @@ const CreateApplication = lazyPage(() => import("./pages/CreateApplication"), "C
 const EditApplication = lazyPage(() => import("./pages/EditApplication"), "EditApplication");
 const Login = lazyPage(() => import("./pages/Login"), "Login");
 const Register = lazyPage(() => import("./pages/Register"), "Register");
+const SearchResults = lazyPage(() => import("./pages/SearchResults"), "SearchResults");
+const Settings = lazyPage(() => import("./pages/Settings"), "Settings");
 const Unauthorized = lazyPage(() => import("./pages/Unauthorized"), "Unauthorized");
 
 function RouteFallback() {
@@ -112,6 +115,33 @@ export default function App() {
           element={
             <ProtectedRoute allowedRoles={["candidate", "admin"]}>
               <CandidateJobApplicationDetail />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="search"
+          element={
+            <ProtectedRoute allowedRoles={["candidate", "hr", "admin"]}>
+              <SearchResults />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="settings"
+          element={
+            <ProtectedRoute allowedRoles={["candidate", "hr", "admin"]}>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="chat"
+          element={
+            <ProtectedRoute allowedRoles={["candidate", "hr", "admin"]}>
+              <Chat />
             </ProtectedRoute>
           }
         />

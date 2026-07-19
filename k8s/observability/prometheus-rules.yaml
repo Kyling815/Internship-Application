@@ -1,0 +1,82 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: internship-platform-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: internship-platform
+spec:
+  groups:
+    - name: internship-platform.availability
+      rules:
+        - alert: InternshipBackendDown
+          expr: up{namespace="internship", job="backend"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            service: backend
+          annotations:
+            summary: Backend metrics target is down
+            description: Prometheus cannot scrape the backend service.
+
+        - alert: InternshipChatDown
+          expr: up{namespace="internship", job="chat-service"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            service: chat-service
+          annotations:
+            summary: Chat metrics target is down
+            description: Prometheus cannot scrape the chat-service.
+
+        - alert: InternshipChatDependencyDown
+          expr: min by (dependency) (chat_dependency_up) == 0
+          for: 2m
+          labels:
+            severity: critical
+            service: chat-service
+          annotations:
+            summary: Chat dependency is down
+            description: The chat-service reports dependency {{ $labels.dependency }} as unavailable.
+
+    - name: internship-platform.slo
+      rules:
+        - alert: InternshipBackend5xxHigh
+          expr: sum(rate(internship_api_http_requests_total{status_code=~"5.."}[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            service: backend
+          annotations:
+            summary: Backend 5xx rate is elevated
+            description: Backend 5xx responses are above the local warning threshold.
+
+        - alert: InternshipBackendP95LatencyHigh
+          expr: histogram_quantile(0.95, sum by (le, route) (rate(internship_api_http_request_duration_seconds_bucket[5m]))) > 1
+          for: 5m
+          labels:
+            severity: warning
+            service: backend
+          annotations:
+            summary: Backend p95 latency is high
+            description: At least one backend route has p95 latency above 1 second.
+
+        - alert: InternshipChatMessageFailureRatioHigh
+          expr: (sum(rate(chat_messages_total{status="failed"}[5m])) / clamp_min(sum(rate(chat_messages_total[5m])), 0.001)) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+            service: chat-service
+          annotations:
+            summary: Chat message failure ratio is high
+            description: More than 10 percent of chat message attempts are failing.
+
+        - alert: InternshipPodCrashLooping
+          expr: max_over_time(kube_pod_container_status_waiting_reason{namespace="internship", reason="CrashLoopBackOff"}[5m]) >= 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Internship pod is crash looping
+            description: Pod {{ $labels.pod }} container {{ $labels.container }} is in CrashLoopBackOff.
+

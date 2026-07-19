@@ -8,17 +8,25 @@ import { AppFooter } from "../components/AppFooter";
 import { useAuth } from "../context/AuthContext";
 import { getRoleHomePath } from "../routes/RoleHomeRedirect";
 
+function canReturnToPath(pathname, role) {
+  if (!pathname || pathname === "/login" || pathname === "/register" || pathname === "/unauthorized") {
+    return false;
+  }
+
+  if (role === "admin") return true;
+  if (pathname === "/chat" || pathname === "/search" || pathname === "/settings") return true;
+  if (role === "hr") return pathname.startsWith("/hr");
+  return pathname.startsWith("/candidate") || pathname.startsWith("/applications");
+}
+
 export function Login() {
-  const { login } = useAuth();
+  const { isAuthenticated, login, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
-  // Use the isAuthenticated from useAuth instead of checking user directly
-  const { isAuthenticated, user } = useAuth();
   
   if (isAuthenticated) {
     const dashboardPath = user?.role === "hr" ? "/hr/dashboard" : "/candidate/dashboard";
@@ -32,7 +40,7 @@ export function Login() {
     try {
       const user = await login(email, password);
       const nextPath = location.state?.from?.pathname;
-      navigate(nextPath || getRoleHomePath(user.role));
+      navigate(canReturnToPath(nextPath, user.role) ? nextPath : getRoleHomePath(user.role), { replace: true });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {

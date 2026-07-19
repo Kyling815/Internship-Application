@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import {
   AUTH_EXPIRED_EVENT,
-  clearStoredToken,
+  clearLocalSession,
   getStoredToken
 } from "../api/client";
 import { getCurrentUser, loginUser, logoutUser, registerUser } from "../api/auth";
@@ -27,7 +27,7 @@ export function AuthProvider({ children }) {
         const response = await getCurrentUser();
         if (!cancelled) setUser(response.data);
       } catch {
-        clearStoredToken();
+        clearLocalSession();
         if (!cancelled) {
           setToken(null);
           setUser(null);

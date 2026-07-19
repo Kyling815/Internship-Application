@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-service
+  namespace: internship
+  labels:
+    app: chat-service
+    app.kubernetes.io/name: chat-service
+    app.kubernetes.io/part-of: internship-platform
+
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: chat-service
+
+  template:
+    metadata:
+      labels:
+        app: chat-service
+        app.kubernetes.io/name: chat-service
+        app.kubernetes.io/part-of: internship-platform
+
+    spec:
+      serviceAccountName: internship-app
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: chat-service
+          image: internship-chat:local
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 3000
+
+          env:
+            - name: NODE_ENV
+              value: local-kubernetes
+
+            - name: PORT
+              value: "3000"
+
+            - name: OTEL_SERVICE_NAME
+              value: chat-service
+
+          envFrom:
+            - configMapRef:
+                name: internship-config
+
+            - secretRef:
+                name: internship-secrets
+
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            failureThreshold: 45
+            periodSeconds: 2
+            timeoutSeconds: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 160Mi
+            limits:
+              cpu: 750m
+              memory: 640Mi
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-service
+  namespace: internship
+
+  labels:
+    app: chat-service
+    app.kubernetes.io/name: chat-service
+    app.kubernetes.io/part-of: internship-platform
+
+spec:
+  selector:
+    app: chat-service
+
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

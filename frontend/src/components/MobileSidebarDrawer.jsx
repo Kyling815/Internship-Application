@@ -1,5 +1,5 @@
-import { LogOut, X, BriefcaseBusiness } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { LogOut, X, BriefcaseBusiness, MessageCircle, Search } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 function MobileLinkBrand({ appLabel }) {
@@ -42,6 +42,7 @@ function MobileSidebarNavItem({ item, onClose }) {
 export function MobileSidebarDrawer({ isOpen, onClose, user, navItems, appLabel, logout }) {
   const drawerRef = useRef(null);
   const navigate = useNavigate();
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -70,7 +71,18 @@ export function MobileSidebarDrawer({ isOpen, onClose, user, navItems, appLabel,
     navigate("/login");
   }
 
+  function handleSearchSubmit(event) {
+    event.preventDefault();
+    const normalizedQuery = query.trim();
+    onClose();
+    navigate(normalizedQuery ? `/search?q=${encodeURIComponent(normalizedQuery)}` : "/search");
+  }
+
   if (!isOpen) return null;
+
+  const communicationItems = [
+    { to: "/chat", label: "Chat", icon: MessageCircle },
+  ];
 
   return (
     <div className="app-mobile-drawer lg:hidden" role="dialog" aria-modal="true" aria-label="Workspace navigation" ref={drawerRef}>
@@ -99,10 +111,30 @@ export function MobileSidebarDrawer({ isOpen, onClose, user, navItems, appLabel,
             </div>
           </div>
         )}
+
+        <form className="app-sidebar__search" role="search" onSubmit={handleSearchSubmit}>
+          <div className="app-sidebar__search-input-wrapper">
+            <Search className="h-4 w-4 app-sidebar__search-icon" />
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search workspace"
+              className="app-sidebar__search-input"
+              aria-label="Search workspace"
+            />
+          </div>
+        </form>
         
         <div className="app-sidebar__scroll-area">
           <nav className="app-nav" aria-label="Workspace navigation">
             {navItems.map((item) => (
+              <MobileSidebarNavItem key={item.to} item={item} onClose={onClose} />
+            ))}
+          </nav>
+          <div className="app-sidebar__nav-label">Communication</div>
+          <nav className="app-nav" aria-label="Communication">
+            {communicationItems.map((item) => (
               <MobileSidebarNavItem key={item.to} item={item} onClose={onClose} />
             ))}
           </nav>

@@ -17,3 +17,9 @@ node_modules/
 docs/
 agents.md
 mcp.json
+chat-service/node_modules/
+chat-service/.env
+chat-service/logs/
+chat-service/coverage/
+chat-service/dist/
+k8s/app/secret.local.yaml

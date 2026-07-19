@@ -1,0 +1,16 @@
+controller:
+  kind: DaemonSet
+
+  nodeSelector:
+    ingress-ready: "true"
+
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Equal
+      effect: NoSchedule
+
+  service:
+    type: NodePort
+    nodePorts:
+      http: 30080
+      https: 30443

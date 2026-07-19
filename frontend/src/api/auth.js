@@ -1,10 +1,11 @@
-import { api, clearStoredToken, setStoredToken } from "./client";
+import { api, clearLocalSession, setStoredToken } from "./client";
 
 export async function registerUser(payload) {
   return api.post("/auth/register", payload);
 }
 
 export async function loginUser(email, password) {
+  clearLocalSession();
   const response = await api.post("/auth/login", { email, password });
   setStoredToken(response.data.access_token);
   return response;
@@ -15,5 +16,5 @@ export async function getCurrentUser() {
 }
 
 export function logoutUser() {
-  clearStoredToken();
+  clearLocalSession();
 }

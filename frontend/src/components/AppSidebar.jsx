@@ -1,5 +1,5 @@
-import { LogOut, PanelLeftClose, PanelLeftOpen, BriefcaseBusiness, Search, Inbox, Bell, Settings, CircleHelp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { LogOut, BriefcaseBusiness, Search, MessageCircle, Settings, CircleHelp } from "lucide-react";
+import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Tooltip, TooltipTrigger } from "react-aria-components";
 
@@ -53,8 +53,7 @@ function SidebarNavItem({ item, isCollapsed }) {
 
 function SidebarNavigation({ navItems, isCollapsed }) {
   const communicationItems = [
-    { to: "/inbox", label: "Inbox", icon: Inbox },
-    { to: "/notifications", label: "Notifications", icon: Bell },
+    { to: "/chat", label: "Chat", icon: MessageCircle },
   ];
 
   return (
@@ -81,17 +80,29 @@ function SidebarNavigation({ navItems, isCollapsed }) {
 }
 
 function SidebarSearch() {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    const normalizedQuery = query.trim();
+    navigate(normalizedQuery ? `/search?q=${encodeURIComponent(normalizedQuery)}` : "/search");
+  }
+
   return (
-    <div className="app-sidebar__search">
+    <form className="app-sidebar__search" onSubmit={handleSubmit} role="search">
       <div className="app-sidebar__search-input-wrapper">
         <Search className="h-4 w-4 app-sidebar__search-icon" />
         <input 
           type="text" 
-          placeholder="Search..." 
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search workspace"
           className="app-sidebar__search-input"
+          aria-label="Search workspace"
         />
       </div>
-    </div>
+    </form>
   );
 }
 
