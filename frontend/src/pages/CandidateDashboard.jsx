@@ -1,14 +1,26 @@
-import { BriefcaseBusiness, Clock3, FileText, Send } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, Clock3, FileText, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { getCandidateDashboard } from "../api/candidate";
 import { getErrorMessage } from "../api/client";
 import { Alert } from "../components/Alert";
-import { StatCard } from "../components/StatCard";
+import {
+  CandidateAnimatedList,
+  CandidateButton,
+  CandidateEmptyState,
+  CandidateHero,
+  CandidateLoading,
+  CandidateMetric,
+  CandidatePage,
+  CandidateSection,
+  formatDateTime
+} from "../components/candidate/CandidateUI";
 import { StatusBadge } from "../components/StatusBadge";
+import { useAuth } from "../context/AuthContext";
 
 export function CandidateDashboard() {
+  const { user } = useAuth();
   const [dashboard, setDashboard] = useState(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -29,114 +41,140 @@ export function CandidateDashboard() {
     loadDashboard();
   }, []);
 
-  if (isLoading) return <p className="text-sm text-zinc-500">Loading candidate dashboard</p>;
+  if (isLoading) return <CandidateLoading label="Loading candidate dashboard" />;
+
+  const displayName = user?.full_name || user?.email?.split("@")[0] || "there";
+  const progressSteps = [
+    { label: "Discover", done: true },
+    { label: "Save", done: Boolean(dashboard?.total_personal_applications) },
+    { label: "Apply", done: Boolean(dashboard?.total_submitted_job_applications) },
+    { label: "Track", done: Boolean(dashboard?.recent_job_applications?.length) }
+  ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-950">Candidate dashboard</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Track personal applications, browse internships, and follow employer updates.
-          </p>
+    <CandidatePage>
+      <CandidateHero
+        eyebrow="Candidate workspace"
+        title={`Welcome back, ${displayName}. Keep your internship search moving.`}
+        copy="Review deadlines, recent submissions, and documents from one calm place, then jump into the next best action."
+        imageSrc="/assets/home/hero/hero-internship-workspace-desktop.webp"
+        actions={
+          <>
+            <CandidateButton to="/candidate/jobs">
+              Browse jobs
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </CandidateButton>
+            <CandidateButton to="/candidate/profile" variant="secondary">Refine profile</CandidateButton>
+          </>
+        }
+      >
+        <div className="mt-6 grid gap-2 rounded-xl bg-white/75 p-3 ring-1 ring-[var(--candidate-border)] sm:grid-cols-4">
+          {progressSteps.map((step, index) => (
+            <div key={step.label} className="flex items-center gap-2 text-sm font-extrabold text-[var(--candidate-ink)]">
+              <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs ${step.done ? "bg-[var(--candidate-primary)] text-white" : "bg-[var(--candidate-surface-soft)] text-[var(--candidate-muted)] ring-1 ring-[var(--candidate-border)]"}`}>
+                {index + 1}
+              </span>
+              {step.label}
+            </div>
+          ))}
         </div>
-        <Link
-          to="/candidate/jobs"
-          className="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800"
-        >
-          Browse jobs
-        </Link>
-      </div>
+      </CandidateHero>
 
       {error && <Alert>{error}</Alert>}
 
       {dashboard && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard icon={BriefcaseBusiness} label="Saved opportunities" value={dashboard.total_personal_applications} />
-            <StatCard icon={Send} label="Submitted job applications" value={dashboard.total_submitted_job_applications} tone="sky" />
-            <StatCard icon={FileText} label="Recent documents" value={dashboard.recent_documents.length} tone="emerald" />
-            <StatCard icon={Clock3} label="Upcoming deadlines" value={dashboard.upcoming_deadlines.length} tone="amber" />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <CandidateMetric icon={BriefcaseBusiness} label="Saved opportunities" value={dashboard.total_personal_applications} helper="Personal tracker roles" />
+            <CandidateMetric icon={Send} label="Submitted applications" value={dashboard.total_submitted_job_applications} helper="Sent to HR teams" />
+            <CandidateMetric icon={FileText} label="Recent documents" value={dashboard.recent_documents.length} helper="Fresh upload activity" />
+            <CandidateMetric icon={Clock3} label="Upcoming deadlines" value={dashboard.upcoming_deadlines.length} helper="Next decision points" />
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
-            <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-4">
-                <h2 className="text-base font-semibold text-zinc-950">Recent job applications</h2>
-                <Link to="/candidate/job-applications" className="text-sm font-medium text-zinc-700 hover:text-zinc-950">
-                  View all
-                </Link>
-              </div>
-              <div className="mt-4 divide-y divide-zinc-100">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_22rem]">
+            <CandidateSection
+              eyebrow="Submissions"
+              title="Recent job applications"
+              action={<CandidateButton to="/candidate/job-applications" variant="secondary">View all</CandidateButton>}
+            >
+              <CandidateAnimatedList>
                 {dashboard.recent_job_applications.length === 0 && (
-                  <p className="py-6 text-sm text-zinc-500">No submitted job applications yet.</p>
+                  <CandidateEmptyState
+                    title="No submitted applications yet"
+                    action={<CandidateButton to="/candidate/jobs">Find internships</CandidateButton>}
+                  >
+                    Start with the job board, attach a CV, and your submitted applications will appear here.
+                  </CandidateEmptyState>
                 )}
                 {dashboard.recent_job_applications.map((application) => (
                   <Link
                     key={application.id}
                     to={`/candidate/job-applications/${application.id}`}
-                    className="flex items-center justify-between gap-4 py-3 hover:bg-zinc-50"
+                    className="candidate-list-row rounded-lg px-1 hover:bg-[var(--candidate-surface-soft)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-zinc-950">
+                      <p className="truncate text-sm font-extrabold text-[var(--candidate-ink-strong)]">
                         {application.job_posting.company.name}
                       </p>
-                      <p className="truncate text-sm text-zinc-500">
+                      <p className="mt-1 truncate text-sm text-[var(--candidate-muted)]">
                         {application.job_posting.title}
                       </p>
                     </div>
                     <StatusBadge status={application.status} />
                   </Link>
                 ))}
-              </div>
-            </section>
+              </CandidateAnimatedList>
+            </CandidateSection>
 
-            <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-              <h2 className="text-base font-semibold text-zinc-950">Upcoming deadlines</h2>
-              <div className="mt-4 space-y-3">
+            <CandidateSection eyebrow="Timing" title="Upcoming deadlines">
+              <div className="space-y-3">
                 {dashboard.upcoming_deadlines.length === 0 && (
-                  <p className="text-sm text-zinc-500">No upcoming deadlines yet.</p>
+                  <CandidateEmptyState title="No deadlines on deck">
+                    When tracker items or submitted jobs have future deadlines, they will collect here.
+                  </CandidateEmptyState>
                 )}
                 {dashboard.upcoming_deadlines.map((item) => (
-                  <div key={`${item.type}-${item.label}-${item.deadline}`} className="rounded-lg border border-zinc-200 p-3">
-                    <div className="flex items-center justify-between gap-4">
+                  <div key={`${item.type}-${item.label}-${item.deadline}`} className="border-l-4 border-[var(--candidate-secondary)] py-2 pl-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-zinc-950">{item.label}</p>
-                        <p className="text-xs uppercase tracking-wide text-zinc-500">{item.type}</p>
+                        <p className="truncate text-sm font-extrabold text-[var(--candidate-ink-strong)]">{item.label}</p>
+                        <p className="mt-1 text-xs font-bold uppercase tracking-wide text-[var(--candidate-muted)]">{item.type}</p>
                       </div>
                       <StatusBadge status={item.status} />
                     </div>
-                    <p className="mt-2 text-sm text-zinc-600">Deadline: {item.deadline}</p>
+                    <p className="mt-2 text-sm text-[var(--candidate-muted)]">Deadline: {item.deadline}</p>
                   </div>
                 ))}
               </div>
-            </section>
+            </CandidateSection>
           </div>
 
-          <section className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-base font-semibold text-zinc-950">Recent documents</h2>
-              <Link to="/applications" className="text-sm font-medium text-zinc-700 hover:text-zinc-950">
-                Manage tracker documents
-              </Link>
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <CandidateSection
+            eyebrow="Documents"
+            title="Recent documents"
+            action={<CandidateButton to="/applications" variant="secondary">Manage tracker documents</CandidateButton>}
+          >
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {dashboard.recent_documents.length === 0 && (
-                <p className="text-sm text-zinc-500">Upload documents through your personal tracker applications.</p>
+                <div className="md:col-span-2 xl:col-span-3">
+                  <CandidateEmptyState title="No documents yet">
+                    Upload CVs, transcripts, and certificates through your personal tracker applications.
+                  </CandidateEmptyState>
+                </div>
               )}
               {dashboard.recent_documents.map((document) => (
-                <div key={document.id} className="rounded-lg border border-zinc-200 p-4">
-                  <p className="truncate text-sm font-semibold text-zinc-950">{document.file_name}</p>
-                  <p className="mt-1 text-xs text-zinc-500">{document.document_type}</p>
-                  <p className="mt-2 text-xs text-zinc-500">
-                    Uploaded {new Date(document.created_at).toLocaleString()}
+                <div key={document.id} className="candidate-soft-surface p-4">
+                  <p className="truncate text-sm font-extrabold text-[var(--candidate-ink-strong)]">{document.file_name}</p>
+                  <p className="mt-1 text-xs font-bold uppercase tracking-wide text-[var(--candidate-primary)]">{document.document_type}</p>
+                  <p className="mt-2 text-xs text-[var(--candidate-muted)]">
+                    Uploaded {formatDateTime(document.created_at)}
                   </p>
                 </div>
               ))}
             </div>
-          </section>
+          </CandidateSection>
         </>
       )}
-    </div>
+    </CandidatePage>
   );
 }

@@ -1,55 +1,72 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import { Layout } from "./components/Layout";
-import { CandidateApply } from "./pages/CandidateApply";
-import { CandidateDashboard } from "./pages/CandidateDashboard";
-import { CandidateJobApplicationDetail } from "./pages/CandidateJobApplicationDetail";
-import { CandidateJobApplications } from "./pages/CandidateJobApplications";
-import { CandidateJobDetail } from "./pages/CandidateJobDetail";
-import { CandidateJobs } from "./pages/CandidateJobs";
-import { CandidateProfile } from "./pages/CandidateProfile";
-import { HrApplicationDetail } from "./pages/HrApplicationDetail";
-import { HrCompany } from "./pages/HrCompany";
-import { HrDashboard } from "./pages/HrDashboard";
-import { HrJobApplicants } from "./pages/HrJobApplicants";
-import { HrJobDetail } from "./pages/HrJobDetail";
-import { HrJobEditor } from "./pages/HrJobEditor";
-import { HrJobs } from "./pages/HrJobs";
+import { Homepage } from "./pages/Homepage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
-import { RoleHomeRedirect } from "./routes/RoleHomeRedirect";
-import { AICVMatching } from "./pages/AICVMatching";
-import { ApplicationDetail } from "./pages/ApplicationDetail";
-import { ApplicationsList } from "./pages/ApplicationsList";
-import { CreateApplication } from "./pages/CreateApplication";
-import { EditApplication } from "./pages/EditApplication";
-import { Login } from "./pages/Login";
-import { Register } from "./pages/Register";
-import { Unauthorized } from "./pages/Unauthorized";
+
+function lazyPage(loader, exportName) {
+  return lazy(() => loader().then((module) => ({ default: module[exportName] })));
+}
+
+const CandidateApply = lazyPage(() => import("./pages/CandidateApply"), "CandidateApply");
+const Layout = lazyPage(() => import("./components/Layout"), "Layout");
+const CandidateDashboard = lazyPage(() => import("./pages/CandidateDashboard"), "CandidateDashboard");
+const CandidateJobApplicationDetail = lazyPage(
+  () => import("./pages/CandidateJobApplicationDetail"),
+  "CandidateJobApplicationDetail"
+);
+const CandidateJobApplications = lazyPage(() => import("./pages/CandidateJobApplications"), "CandidateJobApplications");
+const CandidateJobDetail = lazyPage(() => import("./pages/CandidateJobDetail"), "CandidateJobDetail");
+const CandidateJobs = lazyPage(() => import("./pages/CandidateJobs"), "CandidateJobs");
+const CandidateProfile = lazyPage(() => import("./pages/CandidateProfile"), "CandidateProfile");
+const HrApplicationDetail = lazyPage(() => import("./pages/HrApplicationDetail"), "HrApplicationDetail");
+const HrCompany = lazyPage(() => import("./pages/HrCompany"), "HrCompany");
+const HrDashboard = lazyPage(() => import("./pages/HrDashboard"), "HrDashboard");
+const HrJobApplicants = lazyPage(() => import("./pages/HrJobApplicants"), "HrJobApplicants");
+const HrJobDetail = lazyPage(() => import("./pages/HrJobDetail"), "HrJobDetail");
+const HrJobEditor = lazyPage(() => import("./pages/HrJobEditor"), "HrJobEditor");
+const HrJobs = lazyPage(() => import("./pages/HrJobs"), "HrJobs");
+const AICVMatching = lazyPage(() => import("./pages/AICVMatching"), "AICVMatching");
+const ApplicationDetail = lazyPage(() => import("./pages/ApplicationDetail"), "ApplicationDetail");
+const ApplicationsList = lazyPage(() => import("./pages/ApplicationsList"), "ApplicationsList");
+const CreateApplication = lazyPage(() => import("./pages/CreateApplication"), "CreateApplication");
+const EditApplication = lazyPage(() => import("./pages/EditApplication"), "EditApplication");
+const Login = lazyPage(() => import("./pages/Login"), "Login");
+const Register = lazyPage(() => import("./pages/Register"), "Register");
+const Unauthorized = lazyPage(() => import("./pages/Unauthorized"), "Unauthorized");
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-zinc-50 text-sm font-medium text-zinc-600">
+      Loading
+    </div>
+  );
+}
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/unauthorized" element={<Unauthorized />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<RoleHomeRedirect />} />
-
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        <Route path="/" element={<Homepage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/unauthorized" element={<Unauthorized />} />
         <Route
-          path="candidate/dashboard"
+          path="/"
           element={
-            <ProtectedRoute allowedRoles={["candidate", "admin"]}>
-              <CandidateDashboard />
+            <ProtectedRoute>
+              <Layout />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route
+            path="candidate/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={["candidate", "admin"]}>
+                <CandidateDashboard />
+              </ProtectedRoute>
+            }
+          />
         <Route
           path="candidate/profile"
           element={
@@ -204,8 +221,9 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }

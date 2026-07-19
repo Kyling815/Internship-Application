@@ -77,7 +77,7 @@ README.md
 
 ## Run Database, Backend, And Frontend Separately
 
-Run these commands from the repository root, where `docker-compose.yml` is located. Docker Compose does not start a local database; the backend connects to AWS RDS through `DATABASE_URL`.
+Run these commands from the repository root, where `docker-compose.yml` is located. Docker Compose starts a local PostgreSQL database and the backend connects to it through `DATABASE_URL`.
 
 Copy the environment file if `.env` does not exist:
 
@@ -94,6 +94,11 @@ Copy-Item .env.example .env
 Configure `.env` before starting anything. For local access:
 
 ```env
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/internship_tracker
+POSTGRES_DB=internship_tracker
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_PORT=5432
 BACKEND_PORT=8001
 VITE_API_BASE_URL=http://localhost:8001
 BACKEND_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
@@ -101,9 +106,17 @@ BACKEND_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 For EC2, replace `localhost` with the EC2 public IP in `VITE_API_BASE_URL` and `BACKEND_CORS_ORIGINS`.
 
-### 1. Database Migration
+### 1. Database
 
-Build the backend image, apply migrations to RDS, and confirm the current revision:
+Start the local PostgreSQL container:
+
+```bash
+docker compose up -d db
+```
+
+### 2. Database Migration
+
+Build the backend image, apply migrations to local PostgreSQL, and confirm the current revision:
 
 ```bash
 docker compose build backend
@@ -111,7 +124,7 @@ docker compose run --rm backend alembic upgrade head
 docker compose run --rm backend alembic current
 ```
 
-### 2. Backend And Seed Data
+### 3. Backend And Seed Data
 
 Start only the backend:
 
@@ -134,7 +147,7 @@ API docs: http://localhost:8001/docs
 Health: http://localhost:8001/health
 ```
 
-### 3. Frontend
+### 4. Frontend
 
 Start only the frontend without asking Compose to manage its backend dependency:
 
@@ -178,7 +191,13 @@ The backend image also runs `alembic upgrade head` before Uvicorn starts. The de
 
 If you run FastAPI directly with Uvicorn on Windows, use the same AWS RDS `DATABASE_URL` from `.env`.
 
-Use this shape in `.env` and replace `<PASSWORD>` with the RDS database password:
+If PostgreSQL is running through Docker Compose and Uvicorn is running directly on Windows, use `localhost` instead of the Compose service name:
+
+```env
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/internship_tracker
+```
+
+For AWS RDS, use this shape in `.env` and replace `<PASSWORD>` with the RDS database password:
 
 ```env
 DATABASE_URL=postgresql+psycopg2://postgres:<URL_ENCODED_PASSWORD>@internship-tracker-db.cp0a4e24kw5m.ap-southeast-1.rds.amazonaws.com:5432/postgres?schema=public&sslmode=require
